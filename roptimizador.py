@@ -1,5 +1,6 @@
 import streamlit as st
 import re
+import pandas as pd
 
 # Configuración de IDs posibles
 ALL_IDS = [1, 2, 3, 5, 6, 8, 9, 10, 11, 12]
@@ -7,7 +8,6 @@ ALL_IDS = [1, 2, 3, 5, 6, 8, 9, 10, 11, 12]
 def parse_data_by_blocks(raw_text):
     if not raw_text:
         return []
-    # Separamos por bloques (asumiendo que cada lista histórica es un bloque)
     blocks = raw_text.strip().split('\n')
     parsed_blocks = []
     pattern = r"(\d+)[A-Z\s\.]+(\d+)"
@@ -38,6 +38,11 @@ st.markdown(f"""
     }}
     [data-testid="stSidebar"] {{ background-color: #343A40; }}
     [data-testid="stSidebar"] * {{ color: white !important; }}
+    /* Estilo para la tabla tipo Excel */
+    .stDataFrame {{
+        background-color: white;
+        border-radius: 5px;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -65,7 +70,7 @@ with st.sidebar:
     with col_over:
         st.caption("¿Perdonar?")
         for id_num in ALL_IDS:
-            if st.checkbox(f"OVR", value=False, key=f"ovr_{id_num}", help="Anular castigo por faltas"):
+            if st.checkbox(f"OVR", value=False, key=f"ovr_{id_num}"):
                 overrides.append(id_num)
 
 # --- CUERPO PRINCIPAL ---
@@ -73,54 +78,73 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("1. Datos Históricos")
-    hist_input = st.text_area("Pega aquí las tablas de días anteriores (una por línea):", height=300)
+    hist_input = st.text_area("Pega aquí las tablas de días anteriores (una por línea):", height=250)
 
 with col2:
     st.subheader("2. Estado Actual")
-    current_input = st.text_area("Pega aquí la tabla MÁS RECIENTE:", height=300)
+    current_input = st.text_area("Pega aquí la tabla MÁS RECIENTE:", height=250)
     procesar = st.button("💊 PROCESAR TURNOS")
 
+st.write("---")
+
+# --- SECCIÓN TIPO EXCEL PARA HORARIOS ---
+st.subheader("📅 Gestión de Horarios y Comidas (Editable)")
+st.caption("Haz clic en cualquier celda para escribir el horario o estado de comida.")
+
+# Crear el DataFrame inicial para la tabla
+if 'schedule_df' not in st.session_state:
+    data = {
+        "ID": ALL_IDS,
+        "Surtidor": ["M. Sanchez", "R. Lara", "C. Rodriguez", "H. Cruz", "D. Castillo", "C. Silva", "M. Hernandez", "H. Barboza", "J. Renteria", "R. Gonzalez"],
+        "Entrada": ["08:00"] * len(ALL_IDS),
+        "Salida": ["18:00"] * len(ALL_IDS),
+        "Hora Comida": ["14:00 - 15:00"] * len(ALL_IDS),
+        "Notas": [""] * len(ALL_IDS)
+    }
+    st.session_state.schedule_df = pd.DataFrame(data)
+
+# Mostrar la tabla interactiva
+edited_df = st.data_editor(
+    st.session_state.schedule_df,
+    use_container_width=True,
+    num_rows="fixed",
+    hide_index=True
+)
+st.session_state.schedule_df = edited_df
+
+# --- RESULTADOS DE TURNOS ---
 if procesar:
     if current_input:
         blocks = parse_data_by_blocks(hist_input)
         curr_data = re.findall(r"(\d+)[A-Z\s\.]+(\d+)", current_input)
         curr_counts = {int(id_): int(orders) for id_, orders in curr_data if int(id_) in active_selection}
         
-        # Lógica de Ausencia de 3 días
         total_counts = {}
-        # Calculamos el promedio de los que sí están trabajando para los "nuevos"
         temp_sums = [sum(b.values()) for b in blocks if b]
         avg_base = sum(temp_sums) / len(temp_sums) if temp_sums else 0
         
-        # Valor de castigo (el más alto del equipo)
         max_seen = 0
-        
         for id_ in active_selection:
-            # Revisar últimos 3 bloques
-            recent_activity = [b.get(id_, 0) for b in blocks[-3:]] if len(blocks) >= 3 else [1] # Si no hay historia suficiente, no castigar
-            
+            recent_activity = [b.get(id_, 0) for b in blocks[-3:]] if len(blocks) >= 3 else [1]
             has_been_absent = sum(recent_activity) == 0
             h_total = sum(b.get(id_, 0) for b in blocks)
             c_val = curr_counts.get(id_, 0)
             
             if id_ in overrides or has_been_absent:
-                # Si es perdonado o es "nuevo" por ausencia de 3 días, entra con el promedio actual
                 total_counts[id_] = int(avg_base / len(ALL_IDS)) + c_val if avg_base > 0 else c_val
             else:
                 total_counts[id_] = h_total + c_val
                 max_seen = max(max_seen, total_counts[id_])
 
-        # Aplicar castigo a los que faltaron pero NO cumplen los 3 días de gracia ni tienen override
         for id_ in total_counts:
             if total_counts[id_] == 0 and id_ not in overrides:
                 total_counts[id_] = max_seen + 5
 
-        st.success("✅ Turnos calculados con reglas de asistencia y gracia por 3 días de ausencia.")
-        
-        st.subheader("Próximos 10 Turnos:")
+        st.subheader("🚀 Próximos 10 Turnos:")
         temp_total = total_counts.copy()
         last_id = None
         for i in range(10):
+            if not temp_total: break
             candidates = sorted(temp_total.items(), key=lambda x: x[1])
             next_up = candidates[0][0]
             if next_up == last_id and len(candidates) > 1:
