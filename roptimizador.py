@@ -1,49 +1,53 @@
 import streamlit as st
 import re
 
-# --- CONFIGURATION ---
-# List of IDs currently working today
+# List of IDs currently working
 ACTIVE_IDS = [1, 2, 3, 5, 6, 8, 9, 10, 11, 12]
-TARGET = 55
 
-def get_next_sequence(raw_text, num_turns=20):
-    # Regex to extract ID and Current Orders from your copy-paste format
+def parse_data(raw_text):
+    if not raw_text:
+        return {}
     pattern = r"(\d+)[A-Z\s\.]+(\d+)"
     data = re.findall(pattern, raw_text)
-    
-    # Create dictionary of {ID: Orders}
-    counts = {int(id_): int(orders) for id_, orders in data if int(id_) in ACTIVE_IDS}
-    
-    # Logic: Fill the gap for those furthest from the 55 target
-    sequence = []
-    temp_counts = counts.copy()
-    
-    for _ in range(num_turns):
-        # Pick the person with the lowest current order count
-        next_up = min(temp_counts, key=temp_counts.get)
-        sequence.append(next_up)
-        temp_counts[next_up] += 1
-        
-    return sequence
+    return {int(id_): int(orders) for id_, orders in data if int(id_) in ACTIVE_IDS}
 
-# --- STREAMLIT UI ---
+# --- UI SETUP ---
+st.set_page_config(page_title="Optimizer", layout="centered")
 st.title("📦 Order Dispatch Optimizer")
-st.write("Paste the current table below to get the next 20 turns.")
 
-# Input area for the copy-paste
-input_data = st.text_area("Paste table here:", height=300)
+# 1. Historical Data Input
+with st.expander("📊 Paste Historical/Weekly Data Here"):
+    hist_input = st.text_area("Paste previous days/week table here:", height=150)
 
-if input_data:
-    try:
-        results = get_next_sequence(input_data)
-        st.subheader("Next 20 Turns:")
-        for i, picker_id in enumerate(results):
-            # Bold the first one as requested
-            if i == 0:
-                st.markdown(f"* **{picker_id}**")
-            else:
-                st.markdown(f"* {picker_id}")
-    except Exception as e:
-        st.error("Make sure the table format is correct!")
+# 2. Current Data Input
+st.subheader("Current Status")
+current_input = st.text_area("Paste the CURRENT table here:", height=250)
 
-st.info("Coming Soon: Priority Type & Timeframe filters.")
+if current_input:
+    # Process Data
+    hist_counts = parse_data(hist_input)
+    curr_counts = parse_data(current_input)
+    
+    # Combine counts for total fairness
+    total_counts = {}
+    for id_ in ACTIVE_IDS:
+        total_counts[id_] = hist_counts.get(id_, 0) + curr_counts.get(id_, 0)
+    
+    # Visual Feedback
+    st.success("✅ Information absorbed and processed!")
+    
+    # Generate Sequence
+    st.subheader("Next 20 Turns (Fairness Adjusted):")
+    temp_total = total_counts.copy()
+    
+    results = []
+    for i in range(20):
+        next_up = min(temp_total, key=temp_total.get)
+        results.append(next_up)
+        temp_total[next_up] += 1
+        
+        # Display with bold for the first one
+        label = f"**{next_up}**" if i == 0 else f"{next_up}"
+        st.markdown(f"* {label}")
+else:
+    st.info("Waiting for current table data...")
