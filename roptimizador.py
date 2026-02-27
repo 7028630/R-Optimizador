@@ -57,4 +57,35 @@ st.title("📦 Optimizador de Despacho de Pedidos")
 
 # --- BARRA LATERAL ---
 with st.sidebar:
-    st.header("Config
+    st.header("Configuración")
+    if st.button("🔄 Reiniciar Aplicación"):
+        st.rerun()
+    
+    st.write("---")
+    st.write("**Personal Activo**")
+    st.caption("Desmarca a quienes estén en hora de comida o estén ausentes.")
+    active_selection = []
+    for id_num in ALL_IDS:
+        if st.checkbox(f"ID {id_num}", value=True):
+            active_selection.append(id_num)
+
+# --- CUERPO PRINCIPAL ---
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("1. Datos Históricos")
+    hist_input = st.text_area("Pega aquí las tablas de días anteriores:", height=300, placeholder="Pega el contenido aquí...")
+
+with col2:
+    st.subheader("2. Estado Actual")
+    current_input = st.text_area("Pega aquí la tabla MÁS RECIENTE:", height=300, placeholder="Pega el contenido aquí...")
+    procesar = st.button("💊 PROCESAR TURNOS")
+
+if procesar:
+    if current_input:
+        hist_counts = parse_data(hist_input, active_selection)
+        curr_counts = parse_data(current_input, active_selection)
+        
+        total_counts = {}
+        for id_ in active_selection:
+            total_counts[id_] = hist_counts.get(id_, 0) + curr_counts.get(id_, 0
