@@ -11,51 +11,39 @@ def parse_data(raw_text, active_ids):
     data = re.findall(pattern, raw_text)
     return {int(id_): int(orders) for id_, orders in data if int(id_) in active_ids}
 
-# --- ESTILO PERSONALIZADO (ROJO CEREZA, GRIS, NEGRO) ---
+# --- ESTILO PERSONALIZADO ---
 st.set_page_config(page_title="Optimizador de Pedidos", layout="wide")
 
 st.markdown(f"""
     <style>
-    /* Fondo general */
     .stApp {{
         background-color: #F8F9FA; 
     }}
-    h1, h2, h3, p, span, label {{
-        color: #212529 !important; 
+    /* Forzar color de texto en botones */
+    button div p {{
+        color: white !important;
+        font-weight: bold !important;
     }}
-    /* Barra lateral */
+    /* Botón PROCESAR (Cuerpo) */
+    div.stButton > button {{
+        background-color: #990000 !important;
+        color: white !important;
+        border-radius: 5px;
+        border: none;
+        width: 100%;
+        height: 3em;
+    }}
+    /* Botón REINICIAR (Sidebar) */
+    section[data-testid="stSidebar"] .stButton > button {{
+        background-color: #495057 !important;
+        color: white !important;
+        border: 1px solid #6c757d !important;
+    }}
     [data-testid="stSidebar"] {{
         background-color: #343A40; 
     }}
     [data-testid="stSidebar"] * {{
         color: white !important;
-    }}
-    /* BOTÓN PROCESAR (Rojo, Blanco, Bold) */
-    div.stButton > button:first-child {{
-        background-color: #990000 !important;
-        color: white !important;
-        font-weight: bold !important;
-        border-radius: 5px;
-        border: none;
-        width: 100%;
-        height: 3em;
-        font-size: 18px !important;
-    }}
-    /* BOTÓN REINICIAR en Sidebar (Gris oscuro, Blanco, Bold) */
-    section[data-testid="stSidebar"] .stButton > button {{
-        background-color: #495057 !important;
-        color: white !important;
-        font-weight: bold !important;
-        border: 1px solid #6c757d !important;
-    }}
-    .stButton>button:hover {{
-        opacity: 0.9;
-        color: white !important;
-    }}
-    /* Cajas de texto */
-    textarea {{
-        background-color: #FFFFFF !important;
-        border: 1px solid #CED4DA !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -65,7 +53,6 @@ st.title("📦 Optimizador de Despacho de Pedidos")
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.header("Configuración")
-    # Botón de reiniciar con nuevo nombre y estilo bold
     if st.button("🔄 BORRAR MEMORIA DE DATOS INGRESADOS"):
         st.rerun()
     
@@ -87,7 +74,6 @@ with col1:
 with col2:
     st.subheader("2. Estado Actual")
     current_input = st.text_area("Pega aquí la tabla MÁS RECIENTE:", height=300, placeholder="Pega el contenido aquí...")
-    # Botón con letras blancas, fondo rojo y negrita
     procesar = st.button("💊 PROCESAR TURNOS")
 
 if procesar:
@@ -95,7 +81,6 @@ if procesar:
         hist_counts = parse_data(hist_input, active_selection)
         curr_counts = parse_data(current_input, active_selection)
         
-        # Cálculo de totales
         total_counts = {}
         for id_ in active_selection:
             h_val = hist_counts.get(id_, 0)
@@ -108,9 +93,7 @@ if procesar:
         temp_total = total_counts.copy()
         
         for i in range(10):
-            # El ID con el total más bajo va primero
-            if not temp_total:
-                break
+            if not temp_total: break
             next_up = min(temp_total, key=temp_total.get)
             temp_total[next_up] += 1
             
