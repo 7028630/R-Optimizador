@@ -16,21 +16,18 @@ st.set_page_config(page_title="Optimizador de Pedidos", layout="wide")
 
 st.markdown(f"""
     <style>
-    /* Fondo general y textos */
     .stApp {{
         background-color: #F8F9FA; 
     }}
     h1, h2, h3, p, span, label {{
         color: #212529 !important; 
     }}
-    /* Barra lateral */
     [data-testid="stSidebar"] {{
         background-color: #343A40; 
     }}
     [data-testid="stSidebar"] * {{
         color: white !important;
     }}
-    /* Botón de Procesar con letras blancas y negrita */
     .stButton>button {{
         background-color: #990000 !important; 
         color: white !important;
@@ -45,7 +42,6 @@ st.markdown(f"""
         background-color: #CC0000 !important;
         color: white !important;
     }}
-    /* Cajas de texto */
     textarea {{
         background-color: #FFFFFF !important;
         border: 1px solid #CED4DA !important;
@@ -86,6 +82,29 @@ if procesar:
         hist_counts = parse_data(hist_input, active_selection)
         curr_counts = parse_data(current_input, active_selection)
         
+        # Cálculo de totales combinados
         total_counts = {}
         for id_ in active_selection:
-            total_counts[id_] = hist_counts.get(id_, 0) + curr_counts.get(id_, 0
+            # Sumamos histórico + actual para cada ID activo
+            h_val = hist_counts.get(id_, 0)
+            c_val = curr_counts.get(id_, 0)
+            total_counts[id_] = h_val + c_val
+        
+        st.markdown('<div style="padding:10px; border-radius:5px; background-color:#D4EDDA; color:#155724; border:1px solid #C3E6CB;">✅ Información absorbida y procesada correctamente.</div>', unsafe_allow_html=True)
+        
+        st.subheader("Próximos 10 Turnos:")
+        temp_total = total_counts.copy()
+        
+        for i in range(10):
+            # El ID con el total más bajo de órdenes va primero
+            next_up = min(temp_total, key=temp_total.get)
+            temp_total[next_up] += 1
+            
+            if i == 0:
+                st.markdown(f"<p style='font-size:26px; color:#990000; font-weight:bold; margin:0;'>• TURNO 1: ID {next_up}</p>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<p style='font-size:18px; color:#343A40; margin:5px 0;'>• Turno {i+1}: ID {next_up}</p>", unsafe_allow_html=True)
+    else:
+        st.error("Por favor, pega la tabla actual antes de procesar.")
+else:
+    st.info("Esperando datos para calcular los siguientes turnos...")
