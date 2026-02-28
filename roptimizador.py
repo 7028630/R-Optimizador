@@ -32,7 +32,14 @@ def parse_pending(raw_text):
     lines = clean_text.strip().split('\n')
     orders = []
     for line in lines:
-        if "#N/A" in line or "CANCELADO" in line: continue
+        line = line.strip()
+        if not line or "#N/A" in line or "CANCELADO" in line: continue
+        
+        # Check if the line contains extra text after the timestamp (like an assigned ID)
+        # We only want orders where the line ends shortly after the timestamp am/pm
+        parts = re.split(r'\s{2,}', line) # Split by large gaps
+        if len(parts) > 4: continue # Skip if more columns exist (already assigned)
+
         match = re.search(r"(64\d{4})\s+(\d{1,2})\s+(\d+)", line)
         if match:
             oid, p_raw, items = match.groups()
@@ -46,28 +53,25 @@ def parse_pending(raw_text):
                 })
     return sorted(orders, key=lambda x: (x['P_Real'], -x['Piezas']))
 
-# --- UI STYLE (Industrial High-Contrast) ---
+# --- UI STYLE (Industrial High-Contrast & Compact) ---
 st.set_page_config(page_title="Surtido Pro", layout="wide")
 
 st.markdown("""
     <style>
-    /* Main Background */
     .stApp { background-color: #EAECEE; color: #1C2833; }
     
-    /* Sidebar Text Correction - Force White */
-    [data-testid="stSidebar"] { 
-        background-color: #17202A !important; 
+    /* Compact Sidebar */
+    [data-testid="stSidebar"] { background-color: #17202A !important; }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 0rem !important; }
+    [data-testid="stSidebar"] .stCheckbox, [data-testid="stSidebar"] .stToggle { 
+        margin-bottom: -15px !important; 
     }
-    [data-testid="stSidebar"] .stText, 
-    [data-testid="stSidebar"] label, 
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] h1,
-    [data-testid="stSidebar"] h2 { 
+    [data-testid="stSidebar"] label { 
         color: #FFFFFF !important; 
+        font-size: 0.85rem !important;
         font-weight: bold !important;
     }
 
-    /* Target ID Badge: White on Dark */
     .id-badge {
         background-color: #17202A;
         color: #FFFFFF !important;
@@ -79,30 +83,21 @@ st.markdown("""
         border: 1px solid #566573;
     }
 
-    /* Cards */
     .assignment-card { 
-        background: #FFFFFF; padding: 20px; border-left: 12px solid #922B21; 
-        border-radius: 4px; margin-bottom: 12px; border-bottom: 2px solid #AEB6BF;
+        background: #FFFFFF; padding: 15px; border-left: 12px solid #922B21; 
+        border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF;
         box-shadow: 4px 4px 10px rgba(0,0,0,0.1);
         color: #17202A;
         display: flex; align-items: center;
     }
     
-    /* Process Pill Button */
     div.stButton > button {
         background-color: #922B21 !important;
         color: white !important;
         border-radius: 50px !important; 
-        padding: 10px 24px !important;
+        padding: 8px 20px !important;
         font-weight: bold !important;
         width: 100% !important;
-    }
-    
-    /* Next Best Button */
-    .skip-btn-container div.stButton > button {
-        background-color: #2E4053 !important;
-        font-size: 0.8em !important;
-        border-radius: 20px !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -113,28 +108,33 @@ if 'scores' not in st.session_state: st.session_state.scores = {}
 
 st.title("📦 Panel de Control de Surtido")
 
-# --- SIDEBAR ---
+# --- SIDEBAR (COMPACT) ---
 with st.sidebar:
     st.header("Disponibilidad")
     if st.button("LIMPIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
-    st.write("---")
+    
+    # Header for the columns
+    c1, c2, c3 = st.columns([2,1,1])
+    c3.write("**Excepción**") # Renamed OVR to Excepción
+    
     active_ids = []
     pardon_ids = []
     for i in ALL_IDS:
-        c1, c2, c3 = st.columns([2,1,1])
-        with c1: on = st.toggle(f"Surtidor {i}", value=True, key=f"on_{i}")
-        with c2: meal = st.toggle("🍴", key=f"m_{i}")
-        with c3: pdr = st.checkbox("OVR", key=f"p_{i}")
+        col_name, col_meal, col_exc = st.columns([2,1,1])
+        with col_name: on = st.toggle(f"ID {i}", value=True, key=f"on_{i}")
+        with col_meal: meal = st.toggle("🍴", key=f"m_{i}")
+        with col_exc: pdr = st.checkbox("", key=f"p_{i}") # Column 3 is now "Excepción"
+        
         if on and not meal: active_ids.append(i)
         if pdr: pardon_ids.append(i)
 
 # --- INPUT AREAS ---
 col1, col2, col3 = st.columns(3)
-with col1: h_in = st.text_area("1. Histórico", height=100)
-with col2: t_in = st.text_area("2. Totales de Hoy", height=100)
-with col3: o_in = st.text_area("3. Nuevos Pedidos", height=100)
+with col1: h_in = st.text_area("1. Histórico", height=80)
+with col2: t_in = st.text_area("2. Totales de Hoy", height=80)
+with col3: o_in = st.text_area("3. Nuevos Pedidos", height=80)
 
 if st.button("💊 PROCESAR TURNOS"):
     if not o_in: st.error("No hay datos detectados.")
@@ -175,7 +175,6 @@ if st.session_state.pedidos:
         
         target_idx = min(skips, len(rotation) - 1)
         assigned_id = rotation[target_idx][0]
-        
         if assigned_id == last_id and len(rotation) > 1 and target_idx == 0:
             assigned_id = rotation[1][0]
 
@@ -192,8 +191,6 @@ if st.session_state.pedidos:
                     <span><b>{p['ID']}</b> | {p['Nombre']} | {p['Piezas']} Pzs</span>
                     </div>""", unsafe_allow_html=True)
             with c_nxt:
-                st.markdown('<div class="skip-btn-container">', unsafe_allow_html=True)
                 if st.button("SIGUIENTE MEJOR", key=f"sk_{p['ID']}_{i}"):
                     st.session_state.skip_map[p['ID']] = skips + 1
                     st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
