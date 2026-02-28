@@ -51,9 +51,35 @@ st.set_page_config(page_title="Surtido Pro", layout="wide")
 
 st.markdown("""
     <style>
+    /* Main Background */
     .stApp { background-color: #EAECEE; color: #1C2833; }
-    [data-testid="stSidebar"] { background-color: #17202A !important; color: #FDFEFE !important; }
     
+    /* Sidebar Text Correction - Force White */
+    [data-testid="stSidebar"] { 
+        background-color: #17202A !important; 
+    }
+    [data-testid="stSidebar"] .stText, 
+    [data-testid="stSidebar"] label, 
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2 { 
+        color: #FFFFFF !important; 
+        font-weight: bold !important;
+    }
+
+    /* Target ID Badge: White on Dark */
+    .id-badge {
+        background-color: #17202A;
+        color: #FFFFFF !important;
+        padding: 8px 16px;
+        border-radius: 4px;
+        font-weight: 900;
+        font-size: 1.3em;
+        margin-right: 20px;
+        border: 1px solid #566573;
+    }
+
+    /* Cards */
     .assignment-card { 
         background: #FFFFFF; padding: 20px; border-left: 12px solid #922B21; 
         border-radius: 4px; margin-bottom: 12px; border-bottom: 2px solid #AEB6BF;
@@ -61,35 +87,23 @@ st.markdown("""
         color: #17202A;
         display: flex; align-items: center;
     }
-
-    /* Target ID: White letters on dark gray background */
-    .id-badge {
-        background-color: #1C2833;
-        color: #FFFFFF !important;
-        padding: 6px 14px;
-        border-radius: 4px;
-        font-weight: bold;
-        font-size: 1.2em;
-        margin-right: 15px;
-    }
     
+    /* Process Pill Button */
     div.stButton > button {
         background-color: #922B21 !important;
         color: white !important;
         border-radius: 50px !important; 
         padding: 10px 24px !important;
         font-weight: bold !important;
-        border: none !important;
         width: 100% !important;
     }
     
+    /* Next Best Button */
     .skip-btn-container div.stButton > button {
-        background-color: #566573 !important;
+        background-color: #2E4053 !important;
         font-size: 0.8em !important;
         border-radius: 20px !important;
     }
-
-    h1, h2, h3 { color: #17202A; font-weight: 900; }
     </style>
 """, unsafe_allow_html=True)
 
