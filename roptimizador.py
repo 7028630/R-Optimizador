@@ -35,7 +35,6 @@ def parse_pending(raw_text):
         line = line.strip()
         if not line or "#N/A" in line or "CANCELADO" in line: continue
         
-        # Ignore lines with more than 4 data columns (already assigned)
         parts = re.split(r'\s{2,}', line)
         if len(parts) > 4: continue 
 
@@ -57,25 +56,36 @@ st.set_page_config(page_title="Surtido Pro", layout="wide")
 
 st.markdown("""
     <style>
+    /* Main Background */
     .stApp { background-color: #EAECEE; color: #1C2833; }
     
-    /* Sidebar: High Contrast White Text */
-    [data-testid="stSidebar"] { background-color: #17202A !important; }
-    [data-testid="stSidebar"] label, 
-    [data-testid="stSidebar"] p, 
-    [data-testid="stSidebar"] span { 
-        color: #FFFFFF !important; 
+    /* Sidebar Overrides - FORCING WHITE TEXT */
+    [data-testid="stSidebar"] { 
+        background-color: #17202A !important; 
+        min-width: 350px !important;
+    }
+    
+    /* Universal Sidebar Text Force */
+    [data-testid="stSidebar"] * {
+        color: white !important;
+    }
+
+    /* Target specific Streamlit elements that often stay black */
+    [data-testid="stSidebar"] label p,
+    [data-testid="stSidebar"] .stMarkdown p,
+    [data-testid="stSidebar"] .stCheckbox span,
+    [data-testid="stSidebar"] .stHeader {
+        color: #FFFFFF !important;
         font-weight: 700 !important;
-        font-size: 0.85rem !important;
     }
 
-    /* Balanced Vertical Spacing for 12 IDs */
+    /* Balanced Vertical Spacing */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        padding-top: 1px !important;
-        padding-bottom: 1px !important;
-        margin-top: -2px !important;
+        padding-top: 2px !important;
+        padding-bottom: 2px !important;
     }
 
+    /* Result Cards */
     .id-badge {
         background-color: #17202A;
         color: #FFFFFF !important;
@@ -119,16 +129,16 @@ with st.sidebar:
     
     st.write("---")
     h1, h2, h3 = st.columns([2,1,1])
-    with h1: st.write("Surtidor")
-    with h2: st.write("🍴")
-    with h3: st.write("Excepción") # Updated label
+    with h1: st.write("**Surtidor**")
+    with h2: st.write("**🍴**")
+    with h3: st.write("**Excepción**")
     
     active_ids = []
     pardon_ids = []
     for i in ALL_IDS:
         c_n, c_m, c_e = st.columns([2,1,1])
         with c_n: on = st.toggle(f"ID {i}", value=True, key=f"on_{i}")
-        with c_m: meal = st.toggle("", key=f"m_{i}")
+        with c_m: meal = st.toggle("", key=f"m_{i}", help="Comida")
         with c_e: pdr = st.checkbox("", key=f"p_{i}")
         
         if on and not meal: active_ids.append(i)
@@ -138,7 +148,7 @@ with st.sidebar:
 col1, col2, col3 = st.columns(3)
 with col1: h_in = st.text_area("1. Histórico", height=80)
 with col2: t_in = st.text_area("2. Totales de Hoy", height=80)
-with col3: o_in = st.text_area("3. Nuevos Pedidos", height=100)
+with col3: o_in = st.text_area("3. Nuevos Pedidos (Sin asignar)", height=120)
 
 if st.button("💊 PROCESAR TURNOS"):
     if not o_in: st.error("No hay datos detectados.")
