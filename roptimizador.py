@@ -3,7 +3,7 @@ import re
 import pandas as pd
 from datetime import datetime
 
-# --- CONFIGURATION ---
+# --- CONFIGURACIÓN Y MAPA DE PRIORIDADES ---
 ALL_IDS = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]
 
 PRIORITY_NAMES = {
@@ -32,41 +32,29 @@ def parse_pending(raw_text):
     if not raw_text: return []
     lines = raw_text.strip().split('\n')
     orders = []
-    
     for line in lines:
         if "#N/A" in line or "CANCELADO" in line: continue
-        
-        # This regex now looks for numbers separated by any amount of whitespace (tabs/spaces)
-        # Group 1: Order (64...) | Group 2: Priority | Group 3: Items
         match = re.search(r"(64\d{4})\s+(\d{1,2})\s+(\d+)", line)
-        
-        # If the above fails (because there are no spaces), try the "stuck" version
         if not match:
             match = re.search(r"(64\d{4})(\d{1,2})(\d+)", line)
-
         if match:
             oid, p_raw, items = match.groups()
             p_int = int(p_raw)
-            
-            # If a 2-digit priority isn't in our list (like 18), 
-            # we check if the 1st digit is a valid priority.
             if p_int not in PRIORITY_NAMES and len(p_raw) == 2:
                 p_int = int(p_raw[0])
                 items = p_raw[1] + items
-
             if p_int in PRIORITY_NAMES:
                 orders.append({
-                    "ID": oid, 
-                    "LiveP": get_live_priority(p_int), 
-                    "Items": int(items), 
-                    "RawP": p_int,
-                    "Name": PRIORITY_NAMES.get(p_int)
+                    "ID_Pedido": oid, 
+                    "P_Real": get_live_priority(p_int), 
+                    "Piezas": int(items), 
+                    "P_Original": p_int,
+                    "Nombre_P": PRIORITY_NAMES.get(p_int)
                 })
-            
-    return sorted(orders, key=lambda x: (x['LiveP'], -x['Items']))
+    return sorted(orders, key=lambda x: (x['P_Real'], -x['Piezas']))
 
-# --- UI ---
-st.set_page_config(page_title="Warehouse Ops", layout="wide")
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Optimizador de Almacén", layout="wide")
 
 st.markdown("""
     <style>
@@ -78,12 +66,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📦 Smart Dispatch Rotation")
+st.title("📦 Rotación Inteligente de Surtido")
 
-# --- SIDEBAR ---
+# --- BARRA LATERAL: PERSONAL ---
 with st.sidebar:
-    st.header("Team Management")
-    if st.button("🔄 CLEAR SESSION"): 
+    st.header("Gestión de Equipo")
+    if st.button("🔄 REINICIAR TODO"): 
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         st.rerun()
     st.write("---")
     active_ids = []
@@ -92,21 +82,21 @@ with st.sidebar:
         c1, c2, c3 = st.columns([2,1,1])
         with c1: on = st.toggle(f"ID {i}", value=True, key=f"on_{i}")
         with c2: meal = st.toggle("🍴", key=f"m_{i}")
-        with c3: pdr = st.checkbox("OVR", key=f"p_{i}")
+        with c3: pdr = st.checkbox("OVR", key=f"p_{i}", help="Perdón por ausencia/Nuevo")
         if on and not meal: active_ids.append(i)
         if pdr: pardon_ids.append(i)
 
-# --- INPUTS ---
+# --- ENTRADAS DE DATOS ---
 col1, col2, col3 = st.columns(3)
-with col1: h_in = st.text_area("1. Historical Data", height=150)
-with col2: t_in = st.text_area("2. Today's Totals", height=150)
-with col3: o_in = st.text_area("3. Pending Orders", height=150)
+with col1: h_in = st.text_area("1. Histórico (Días anteriores)", height=150)
+with col2: t_in = st.text_area("2. Totales de Hoy", height=150)
+with col3: o_in = st.text_area("3. Pedidos Pendientes (Pegar aquí)", height=150)
 
-if st.button("💊 GENERATE ROTATION"):
+if st.button("💊 GENERAR ASIGNACIONES"):
     if not o_in:
-        st.error("Paste data in Column 3.")
+        st.error("Por favor, pega los pedidos en la columna 3.")
     else:
-        # Rotation Math
+        # Lógica de Rotación
         pat = r"(\d+)[A-Z\s\.]+(\d+)"
         h_blocks = []
         for line in h_in.strip().split('\n'):
@@ -116,7 +106,7 @@ if st.button("💊 GENERATE ROTATION"):
         t_m = re.findall(pat, t_in)
         t_counts = {int(k): int(v) for k, v in t_m if int(k) in active_ids}
         
-        pending = parse_pending(o_in)
+        st.session_state.pedidos_procesados = parse_pending(o_in)
 
         scores = {}
         temp_sums = [sum(b.values()) for b in h_blocks if b]
@@ -134,30 +124,42 @@ if st.button("💊 GENERATE ROTATION"):
         
         for idx in scores:
             if scores[idx] == 0 and idx not in pardon_ids: scores[idx] = top + 5
+            
+        st.session_state.puntuaciones = scores
 
-        # Display Result
-        st.write("---")
-        if not pending:
-            st.warning("Still no orders detected. Please ensure you are copying the ID, Priority, and Items columns.")
-        else:
-            last_id = None
-            for i, order in enumerate(pending[:30]):
-                rotation = sorted(scores.items(), key=lambda x: x[1])
-                best_id = rotation[0][0]
-                if best_id == last_id and len(rotation) > 1:
-                    best_id = rotation[1][0]
-                
-                scores[best_id] += 1
-                last_id = best_id
-                
-                with st.container():
-                    c_chk, c_crd = st.columns([1, 20])
-                    with c_chk: done = st.checkbox("", key=f"ck_{order['ID']}_{i}")
-                    if not done:
-                        with c_crd:
-                            st.markdown(f"""
-                            <div class="assignment-card">
-                                <b style="color:#990000; font-size:18px;">ID {best_id}</b> ⮕ 
-                                <b>{order['ID']}</b> | {order['Name']} | {order['Items']} Items
-                            </div>
-                            """, unsafe_allow_html=True)
+# --- MOSTRAR RESULTADOS (PERSISTENTES) ---
+if 'pedidos_procesados' in st.session_state:
+    st.write("---")
+    st.subheader(f"Cola de Asignación Actual ({datetime.now().strftime('%H:%M')})")
+    
+    scores_temp = st.session_state.puntuaciones.copy()
+    last_id = None
+    
+    for i, pedido in enumerate(st.session_state.pedidos_procesados[:40]):
+        # Calcular quién sigue
+        rotacion = sorted(scores_temp.items(), key=lambda x: x[1])
+        if not rotacion: break
+        best_id = rotacion[0][0]
+        if best_id == last_id and len(rotacion) > 1:
+            best_id = rotacion[1][0]
+        
+        scores_temp[best_id] += 1
+        last_id = best_id
+        
+        # UI de la Tarjeta
+        c_chk, c_crd = st.columns([1, 20])
+        with c_chk: 
+            # El estado de "Listo" se guarda por ID de pedido
+            completado = st.checkbox("", key=f"done_{pedido['ID_Pedido']}_{i}")
+        
+        if not completado:
+            with c_crd:
+                st.markdown(f"""
+                <div class="assignment-card">
+                    <b style="color:#990000; font-size:20px;">SURTIDOR ID: {best_id}</b> ⮕ 
+                    <b>Pedido: {pedido['ID_Pedido']}</b> | {pedido['Nombre_P']} | {pedido['Piezas']} Piezas
+                </div>
+                """, unsafe_allow_html=True)
+
+st.write("---")
+st.caption("Cortes Automáticos: Locales 12:45 | Foráneos 15:00 | Torreón 16:00")
