@@ -1,159 +1,151 @@
 import streamlit as st
 import re
 import pandas as pd
+from datetime import datetime
 
-# Configuración de IDs posibles
-ALL_IDS = [1, 2, 3, 5, 6, 8, 9, 10, 11, 12]
+# --- CONFIGURATION & PRIORITY MAP ---
+ALL_IDS = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]
 
-def parse_data_by_blocks(raw_text):
-    if not raw_text:
-        return []
-    blocks = raw_text.strip().split('\n')
-    parsed_blocks = []
-    pattern = r"(\d+)[A-Z\s\.]+(\d+)"
-    for block in blocks:
-        data = re.findall(pattern, block)
-        if data:
-            parsed_blocks.append({int(id_): int(orders) for id_, orders in data})
-    return parsed_blocks
+# Priority Mapping
+PRIORITY_MAP = {
+    1: "Local Urgente (1)", 2: "Local Urgente (2)",
+    3: "Apodaca", 4: "Guadalupe", 5: "Santa Catarina",
+    6: "Solidaridad", 7: "Unidad", 8: "Sur Foráneo", 9: "Sur",
+    10: "Foráneo Urgente", 11: "Foráneo", 12: "Torreón",
+    14: "Saltillo", 16: "Local Después de Corte",
+    17: "Foráneo Urg. Desp. Corte", 18: "Foráneo Desp. Corte", 19: "Torreón Desp. Corte"
+}
 
-# --- ESTILO PERSONALIZADO ---
-st.set_page_config(page_title="Optimizador de Pedidos", layout="wide")
+def get_dynamic_priority(p_val, current_time):
+    # Logic: After 12:45, Locals (3-9) move to 16
+    if 3 <= p_val <= 9:
+        if current_time >= "12:45": return 16
+        return 3 # Grouped importance
+    # After 15:00, Foráneos (10-11) move to 18
+    if p_val in [10, 11] and current_time >= "15:00":
+        return 18
+    # After 16:00, Torreón (12) moves to 19
+    if p_val == 12 and current_time >= "16:00":
+        return 19
+    return p_val
 
-st.markdown(f"""
+def parse_pending_orders_complex(raw_text):
+    if not raw_text: return []
+    now_str = datetime.now().strftime("%H:%M")
+    lines = raw_text.strip().split('\n')
+    orders = []
+    for line in lines:
+        if "#N/A" in line or "CANCELADO" in line: continue
+        parts = re.findall(r"(64\d{4})(\d{1,2})(\d{1,4})", line)
+        if parts:
+            order_id, p_raw, items = parts[0]
+            p_val = int(p_raw)
+            # Apply time-based logic
+            final_p = get_dynamic_priority(p_val, now_str)
+            orders.append({"ID": order_id, "P": final_p, "Items": int(items), "RawP": p_val})
+    return sorted(orders, key=lambda x: (x['P'], -x['Items']))
+
+# --- UI SETUP ---
+st.set_page_config(page_title="Warehouse Ops", layout="wide")
+
+st.markdown("""
     <style>
-    .stApp {{ background-color: #F8F9FA; }}
-    button div p {{ color: white !important; font-weight: bold !important; }}
-    div.stButton > button {{
-        background-color: #990000 !important;
-        color: white !important;
-        border-radius: 5px;
-        border: none;
-        width: 100%;
-        height: 3em;
-    }}
-    section[data-testid="stSidebar"] .stButton > button {{
-        background-color: #495057 !important;
-        color: white !important;
-    }}
-    [data-testid="stSidebar"] {{ background-color: #343A40; }}
-    [data-testid="stSidebar"] * {{ color: white !important; }}
-    /* Estilo para la tabla tipo Excel */
-    .stDataFrame {{
-        background-color: white;
-        border-radius: 5px;
-    }}
+    .stApp { background-color: #F4F4F4; }
+    .assignment-card { background: white; padding: 10px; border-left: 10px solid #990000; border-radius: 4px; margin-bottom: 5px; }
+    .done { opacity: 0.4; text-decoration: line-through; }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-st.title("📦 Optimizador de Despacho de Pedidos")
-
-# --- BARRA LATERAL ---
+# --- SIDEBAR: SIMPLE PERSONNEL & MEALS ---
 with st.sidebar:
-    st.header("Configuración")
-    if st.button("🔄 BORRAR MEMORIA DE DATOS INGRESADOS"):
-        st.rerun()
+    st.header("Team Status")
+    if st.button("RESET ALL DATA"): st.rerun()
     
     st.write("---")
-    st.write("**Estado del Personal**")
-    
-    active_selection = []
-    overrides = []
-    
-    col_act, col_over = st.columns(2)
-    with col_act:
-        st.caption("¿Presente?")
-        for id_num in ALL_IDS:
-            if st.checkbox(f"ID {id_num}", value=True, key=f"act_{id_num}"):
-                active_selection.append(id_num)
-    
-    with col_over:
-        st.caption("¿Perdonar?")
-        for id_num in ALL_IDS:
-            if st.checkbox(f"OVR", value=False, key=f"ovr_{id_num}"):
-                overrides.append(id_num)
-
-# --- CUERPO PRINCIPAL ---
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("1. Datos Históricos")
-    hist_input = st.text_area("Pega aquí las tablas de días anteriores (una por línea):", height=250)
-
-with col2:
-    st.subheader("2. Estado Actual")
-    current_input = st.text_area("Pega aquí la tabla MÁS RECIENTE:", height=250)
-    procesar = st.button("💊 PROCESAR TURNOS")
-
-st.write("---")
-
-# --- SECCIÓN TIPO EXCEL PARA HORARIOS ---
-st.subheader("📅 Gestión de Horarios y Comidas (Editable)")
-st.caption("Haz clic en cualquier celda para escribir el horario o estado de comida.")
-
-# Crear el DataFrame inicial para la tabla
-if 'schedule_df' not in st.session_state:
-    data = {
-        "ID": ALL_IDS,
-        "Surtidor": ["M. Sanchez", "R. Lara", "C. Rodriguez", "H. Cruz", "D. Castillo", "C. Silva", "M. Hernandez", "H. Barboza", "J. Renteria", "R. Gonzalez"],
-        "Entrada": ["08:00"] * len(ALL_IDS),
-        "Salida": ["18:00"] * len(ALL_IDS),
-        "Hora Comida": ["14:00 - 15:00"] * len(ALL_IDS),
-        "Notas": [""] * len(ALL_IDS)
-    }
-    st.session_state.schedule_df = pd.DataFrame(data)
-
-# Mostrar la tabla interactiva
-edited_df = st.data_editor(
-    st.session_state.schedule_df,
-    use_container_width=True,
-    num_rows="fixed",
-    hide_index=True
-)
-st.session_state.schedule_df = edited_df
-
-# --- RESULTADOS DE TURNOS ---
-if procesar:
-    if current_input:
-        blocks = parse_data_by_blocks(hist_input)
-        curr_data = re.findall(r"(\d+)[A-Z\s\.]+(\d+)", current_input)
-        curr_counts = {int(id_): int(orders) for id_, orders in curr_data if int(id_) in active_selection}
+    st.subheader("Shift / Meal Toggle")
+    # Simple checkbox list is much more stable than the data_editor for mobile/fast use
+    active_ids = []
+    for i in ALL_IDS:
+        col_a, col_b = st.columns([2, 1])
+        with col_a:
+            is_active = st.toggle(f"ID {i} Working", value=True, key=f"active_{i}")
+        with col_b:
+            is_meal = st.toggle("🍴", value=False, key=f"meal_{i}")
         
-        total_counts = {}
-        temp_sums = [sum(b.values()) for b in blocks if b]
-        avg_base = sum(temp_sums) / len(temp_sums) if temp_sums else 0
+        if is_active and not is_meal:
+            active_ids.append(i)
+    
+    st.write("---")
+    overrides = [id_n for id_n in ALL_IDS if st.checkbox(f"Pardon ID {id_n}", key=f"ovr_{id_n}")]
+
+# --- MAIN CONTENT ---
+c1, c2, c3 = st.columns(3)
+with c1: hist_in = st.text_area("Historical Totals", height=150)
+with c2: today_in = st.text_area("Today's Totals", height=150)
+with c3: orders_in = st.text_area("Google Sheet Dump", height=150)
+
+if st.button("💊 CALCULATE ASSIGNMENTS"):
+    # Logic: 3-day absence & Historical parsing
+    # (Regex from previous step kept for stability)
+    pattern = r"(\d+)[A-Z\s\.]+(\d+)"
+    hist_blocks = []
+    for b in hist_in.strip().split('\n'):
+        d = re.findall(pattern, b)
+        if d: hist_blocks.append({int(k): int(v) for k, v in d})
+    
+    curr_data = re.findall(pattern, today_in)
+    curr_counts = {int(k): int(v) for k, v in curr_data if int(k) in active_ids}
+    
+    # Priority Sorting
+    pending = parse_pending_orders_complex(orders_in)
+
+    # Rotation Logic
+    scores = {}
+    temp_sums = [sum(b.values()) for b in hist_blocks if b]
+    avg = sum(temp_sums) / len(temp_sums) if temp_sums else 0
+    max_s = 0
+    
+    for idx in active_ids:
+        absent = len(hist_blocks) >= 3 and sum([b.get(idx, 0) for b in hist_blocks[-3:]]) == 0
+        h_total = sum(b.get(idx, 0) for b in hist_blocks)
+        c_val = curr_counts.get(idx, 0)
         
-        max_seen = 0
-        for id_ in active_selection:
-            recent_activity = [b.get(id_, 0) for b in blocks[-3:]] if len(blocks) >= 3 else [1]
-            has_been_absent = sum(recent_activity) == 0
-            h_total = sum(b.get(id_, 0) for b in blocks)
-            c_val = curr_counts.get(id_, 0)
-            
-            if id_ in overrides or has_been_absent:
-                total_counts[id_] = int(avg_base / len(ALL_IDS)) + c_val if avg_base > 0 else c_val
-            else:
-                total_counts[id_] = h_total + c_val
-                max_seen = max(max_seen, total_counts[id_])
+        if idx in overrides or absent:
+            scores[idx] = int(avg / len(ALL_IDS)) + c_val
+        else:
+            scores[idx] = h_total + c_val
+            max_s = max(max_s, scores[idx])
+    
+    for idx in scores:
+        if scores[idx] == 0 and idx not in overrides: scores[idx] = max_s + 5
 
-        for id_ in total_counts:
-            if total_counts[id_] == 0 and id_ not in overrides:
-                total_counts[id_] = max_seen + 5
-
-        st.subheader("🚀 Próximos 10 Turnos:")
-        temp_total = total_counts.copy()
-        last_id = None
-        for i in range(10):
-            if not temp_total: break
-            candidates = sorted(temp_total.items(), key=lambda x: x[1])
-            next_up = candidates[0][0]
-            if next_up == last_id and len(candidates) > 1:
-                next_up = candidates[1][0]
-            
-            temp_total[next_up] += 1
-            last_id = next_up
-            
-            color = "#990000" if i == 0 else "#343A40"
-            st.markdown(f"<p style='font-size:18px; color:{color};'>• Turno {i+1}: <b>ID {next_up}</b></p>", unsafe_allow_html=True)
+    # --- DISPLAY QUEUE WITH "CHECK-OFF" ---
+    st.subheader(f"🚀 Live Queue (Current Time: {datetime.now().strftime('%H:%M')})")
+    
+    if not pending:
+        st.info("No orders found. Ensure you pasted the columns correctly.")
     else:
-        st.error("Pega la tabla actual.")
+        last_id = None
+        for i, order in enumerate(pending[:20]):
+            # Get next person in rotation
+            sorted_scores = sorted(scores.items(), key=lambda x: x[1])
+            best_id = sorted_scores[0][0]
+            if best_id == last_id and len(sorted_scores) > 1:
+                best_id = sorted_scores[1][0]
+            
+            # Update score for the next loop iteration
+            scores[best_id] += 1
+            last_id = best_id
+            
+            # Assignment Box with a "Done" checkbox
+            with st.container():
+                is_done = st.checkbox(f"Mark Assigned: {order['ID']}", key=f"check_{order['ID']}_{i}")
+                card_class = "assignment-card done" if is_done else "assignment-card"
+                
+                if not is_done: # Only show details if not checked off (per your request)
+                    st.markdown(f"""
+                    <div class="{card_class}">
+                        <b style="color:#990000; font-size:18px;">ID {best_id}</b> ⮕ 
+                        Order: <b>{order['ID']}</b> | Priority: {PRIORITY_MAP.get(order['RawP'], order['RawP'])} | Items: {order['Items']}
+                    </div>
+                    """, unsafe_allow_html=
