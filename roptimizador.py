@@ -6,146 +6,165 @@ from datetime import datetime
 # --- CONFIGURATION & PRIORITY MAP ---
 ALL_IDS = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]
 
-# Priority Mapping
-PRIORITY_MAP = {
+PRIORITY_NAMES = {
     1: "Local Urgente (1)", 2: "Local Urgente (2)",
     3: "Apodaca", 4: "Guadalupe", 5: "Santa Catarina",
     6: "Solidaridad", 7: "Unidad", 8: "Sur Foráneo", 9: "Sur",
     10: "Foráneo Urgente", 11: "Foráneo", 12: "Torreón",
-    14: "Saltillo", 16: "Local Después de Corte",
+    14: "Saltillo", 16: "Local Desp. Corte",
     17: "Foráneo Urg. Desp. Corte", 18: "Foráneo Desp. Corte", 19: "Torreón Desp. Corte"
 }
 
-def get_dynamic_priority(p_val, current_time):
-    # Logic: After 12:45, Locals (3-9) move to 16
-    if 3 <= p_val <= 9:
-        if current_time >= "12:45": return 16
-        return 3 # Grouped importance
-    # After 15:00, Foráneos (10-11) move to 18
-    if p_val in [10, 11] and current_time >= "15:00":
+def get_live_priority(p_val):
+    now = datetime.now().time()
+    # 12:45 PM Deadline
+    d1245 = datetime.strptime("12:45", "%H:%M").time()
+    # 03:00 PM Deadline
+    d1500 = datetime.strptime("15:00", "%H:%M").time()
+    # 04:00 PM Deadline
+    d1600 = datetime.strptime("16:00", "%H:%M").time()
+
+    # Exceptions: Saltillo (14) and Sur Foráneo (8) NEVER change
+    if p_val == 14 or p_val == 8 or p_val <= 2:
+        return p_val
+    
+    # Rule 1: Locals (3-7, 9) -> 16 after 12:45
+    if (3 <= p_val <= 7 or p_val == 9) and now >= d1245:
+        return 16
+    
+    # Rule 2: Foráneos (10-11) -> 18 after 15:00
+    if (p_val == 10 or p_val == 11) and now >= d1500:
         return 18
-    # After 16:00, Torreón (12) moves to 19
-    if p_val == 12 and current_time >= "16:00":
+        
+    # Rule 3: Torreón (12) -> 19 after 16:00
+    if p_val == 12 and now >= d1600:
         return 19
+        
     return p_val
 
-def parse_pending_orders_complex(raw_text):
+def parse_pending(raw_text):
     if not raw_text: return []
-    now_str = datetime.now().strftime("%H:%M")
     lines = raw_text.strip().split('\n')
     orders = []
     for line in lines:
         if "#N/A" in line or "CANCELADO" in line: continue
+        # Matches OrderID(64...) then Priority(up to 2 digits) then Items
         parts = re.findall(r"(64\d{4})(\d{1,2})(\d{1,4})", line)
         if parts:
-            order_id, p_raw, items = parts[0]
-            p_val = int(p_raw)
-            # Apply time-based logic
-            final_p = get_dynamic_priority(p_val, now_str)
-            orders.append({"ID": order_id, "P": final_p, "Items": int(items), "RawP": p_val})
-    return sorted(orders, key=lambda x: (x['P'], -x['Items']))
+            oid, p_raw, items = parts[0]
+            p_int = int(p_raw)
+            live_p = get_live_priority(p_int)
+            orders.append({"ID": oid, "LiveP": live_p, "Items": int(items), "Name": PRIORITY_NAMES.get(p_int, "Other")})
+    # Sort by Live Priority (1 is top), then Items (More is top)
+    return sorted(orders, key=lambda x: (x['LiveP'], -x['Items']))
 
-# --- UI SETUP ---
-st.set_page_config(page_title="Warehouse Ops", layout="wide")
+# --- UI ---
+st.set_page_config(page_title="Warehouse Dispatch", layout="wide")
 
 st.markdown("""
     <style>
-    .stApp { background-color: #F4F4F4; }
-    .assignment-card { background: white; padding: 10px; border-left: 10px solid #990000; border-radius: 4px; margin-bottom: 5px; }
-    .done { opacity: 0.4; text-decoration: line-through; }
+    .stApp { background-color: #F8F9FA; }
+    .assignment-card { 
+        background: white; padding: 12px; border-left: 10px solid #990000; 
+        border-radius: 6px; margin-bottom: 8px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR: SIMPLE PERSONNEL & MEALS ---
+st.title("📦 Smart Dispatch Rotation")
+
+# --- SIDEBAR: SIMPLE PERSONNEL ---
 with st.sidebar:
-    st.header("Team Status")
-    if st.button("RESET ALL DATA"): st.rerun()
-    
+    st.header("Team Management")
+    if st.button("CLEAR ALL"): st.rerun()
     st.write("---")
-    st.subheader("Shift / Meal Toggle")
-    # Simple checkbox list is much more stable than the data_editor for mobile/fast use
+    
     active_ids = []
+    pardon_ids = []
     for i in ALL_IDS:
-        col_a, col_b = st.columns([2, 1])
-        with col_a:
-            is_active = st.toggle(f"ID {i} Working", value=True, key=f"active_{i}")
-        with col_b:
-            is_meal = st.toggle("🍴", value=False, key=f"meal_{i}")
+        c1, c2, c3 = st.columns([2,1,1])
+        with c1: on = st.toggle(f"ID {i}", value=True, key=f"on_{i}")
+        with c2: meal = st.toggle("🍴", key=f"m_{i}")
+        with c3: pdr = st.checkbox("OVR", key=f"p_{i}", help="Pardon/New Member")
         
-        if is_active and not is_meal:
-            active_ids.append(i)
-    
-    st.write("---")
-    overrides = [id_n for id_n in ALL_IDS if st.checkbox(f"Pardon ID {id_n}", key=f"ovr_{id_n}")]
+        if on and not meal: active_ids.append(i)
+        if pdr: pardon_ids.append(i)
 
-# --- MAIN CONTENT ---
-c1, c2, c3 = st.columns(3)
-with c1: hist_in = st.text_area("Historical Totals", height=150)
-with c2: today_in = st.text_area("Today's Totals", height=150)
-with c3: orders_in = st.text_area("Google Sheet Dump", height=150)
+# --- INPUTS ---
+col1, col2, col3 = st.columns(3)
+with col1: h_in = st.text_area("Historical Data", height=150)
+with col2: t_in = st.text_area("Today's Totals", height=150)
+with col3: o_in = st.text_area("Pending Orders (Paste here)", height=150)
 
-if st.button("💊 CALCULATE ASSIGNMENTS"):
-    # Logic: 3-day absence & Historical parsing
-    # (Regex from previous step kept for stability)
-    pattern = r"(\d+)[A-Z\s\.]+(\d+)"
-    hist_blocks = []
-    for b in hist_in.strip().split('\n'):
-        d = re.findall(pattern, b)
-        if d: hist_blocks.append({int(k): int(v) for k, v in d})
+if st.button("💊 RUN ROTATION"):
+    # Parsing Logic
+    pat = r"(\d+)[A-Z\s\.]+(\d+)"
+    h_blocks = []
+    for line in h_in.strip().split('\n'):
+        matches = re.findall(pat, line)
+        if matches: h_blocks.append({int(k): int(v) for k, v in matches})
     
-    curr_data = re.findall(pattern, today_in)
-    curr_counts = {int(k): int(v) for k, v in curr_data if int(k) in active_ids}
+    t_matches = re.findall(pat, t_in)
+    t_counts = {int(k): int(v) for k, v in t_matches if int(k) in active_ids}
     
-    # Priority Sorting
-    pending = parse_pending_orders_complex(orders_in)
+    pending = parse_pending(o_in)
 
-    # Rotation Logic
+    # Calculate Rotation Scores
     scores = {}
-    temp_sums = [sum(b.values()) for b in hist_blocks if b]
-    avg = sum(temp_sums) / len(temp_sums) if temp_sums else 0
-    max_s = 0
+    temp_sums = [sum(b.values()) for b in h_blocks if b]
+    avg_score = sum(temp_sums) / len(temp_sums) if temp_sums else 0
+    top_score = 0
     
     for idx in active_ids:
-        absent = len(hist_blocks) >= 3 and sum([b.get(idx, 0) for b in hist_blocks[-3:]]) == 0
-        h_total = sum(b.get(idx, 0) for b in hist_blocks)
-        c_val = curr_counts.get(idx, 0)
+        # 3-day rule
+        is_new = len(h_blocks) >= 3 and sum([b.get(idx, 0) for b in h_blocks[-3:]]) == 0
+        h_sum = sum(b.get(idx, 0) for b in h_blocks)
+        current = t_counts.get(idx, 0)
         
-        if idx in overrides or absent:
-            scores[idx] = int(avg / len(ALL_IDS)) + c_val
+        if idx in pardon_ids or is_new:
+            scores[idx] = int(avg_score / len(ALL_IDS)) + current
         else:
-            scores[idx] = h_total + c_val
-            max_s = max(max_s, scores[idx])
+            scores[idx] = h_sum + current
+            top_score = max(top_score, scores[idx])
     
+    # Penalty for missing IDs not pardoned
     for idx in scores:
-        if scores[idx] == 0 and idx not in overrides: scores[idx] = max_s + 5
+        if scores[idx] == 0 and idx not in pardon_ids: scores[idx] = top_score + 5
 
-    # --- DISPLAY QUEUE WITH "CHECK-OFF" ---
-    st.subheader(f"🚀 Live Queue (Current Time: {datetime.now().strftime('%H:%M')})")
+    # Display Results
+    st.write("---")
+    st.subheader(f"Current Priority Queue (System Time: {datetime.now().strftime('%H:%M')})")
     
     if not pending:
-        st.info("No orders found. Ensure you pasted the columns correctly.")
+        st.info("No orders found. Paste data in Column 3.")
     else:
         last_id = None
-        for i, order in enumerate(pending[:20]):
-            # Get next person in rotation
-            sorted_scores = sorted(scores.items(), key=lambda x: x[1])
-            best_id = sorted_scores[0][0]
-            if best_id == last_id and len(sorted_scores) > 1:
-                best_id = sorted_scores[1][0]
+        for i, order in enumerate(pending[:15]):
+            # Get fairest surtidor
+            rotation = sorted(scores.items(), key=lambda x: x[1])
+            best_id = rotation[0][0]
+            if best_id == last_id and len(rotation) > 1:
+                best_id = rotation[1][0]
             
-            # Update score for the next loop iteration
+            # Update score for the next loop assignment
             scores[best_id] += 1
             last_id = best_id
             
-            # Assignment Box with a "Done" checkbox
+            # Assignment Card
             with st.container():
-                is_done = st.checkbox(f"Mark Assigned: {order['ID']}", key=f"check_{order['ID']}_{i}")
-                card_class = "assignment-card done" if is_done else "assignment-card"
+                # The Checkbox to "clear" it
+                col_check, col_card = st.columns([1, 15])
+                with col_check:
+                    done = st.checkbox("", key=f"d_{order['ID']}_{i}")
                 
-                if not is_done: # Only show details if not checked off (per your request)
-                    st.markdown(f"""
-                    <div class="{card_class}">
-                        <b style="color:#990000; font-size:18px;">ID {best_id}</b> ⮕ 
-                        Order: <b>{order['ID']}</b> | Priority: {PRIORITY_MAP.get(order['RawP'], order['RawP'])} | Items: {order['Items']}
-                    </div>
-                    """, unsafe_allow_html=
+                if not done:
+                    with col_card:
+                        st.markdown(f"""
+                        <div class="assignment-card">
+                            <b style="color:#990000; font-size:20px;">ID {best_id}</b> ⮕ 
+                            Order: <b>{order['ID']}</b> | {order['Name']} | {order['Items']} Items
+                        </div>
+                        """, unsafe_allow_html=True)
+
+st.write("---")
+st.caption("Auto-Priority Deadlines: Locals 12:45 | Foráneos 15:00 | Torreón 16:00")
