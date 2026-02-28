@@ -28,13 +28,11 @@ def get_live_priority(p_val):
 
 def parse_pending(raw_text):
     if not raw_text: return []
-    # Normalize text to handle the 'a. m.' and spacing issues seen in your debug image
     clean_text = raw_text.replace("a. m.", "am").replace("p. m.", "pm")
     lines = clean_text.strip().split('\n')
     orders = []
     for line in lines:
         if "#N/A" in line or "CANCELADO" in line: continue
-        # Regex to capture Order ID (64...), Priority, and Items even with multiple spaces/tabs
         match = re.search(r"(64\d{4})\s+(\d{1,2})\s+(\d+)", line)
         if match:
             oid, p_raw, items = match.groups()
@@ -48,49 +46,53 @@ def parse_pending(raw_text):
                 })
     return sorted(orders, key=lambda x: (x['P_Real'], -x['Piezas']))
 
-# --- UI STYLE (High Contrast Industrial) ---
+# --- UI STYLE (Industrial High-Contrast) ---
 st.set_page_config(page_title="Surtido Pro", layout="wide")
 
 st.markdown("""
     <style>
-    /* Background: Conch White / Light Gray */
     .stApp { background-color: #EAECEE; color: #1C2833; }
-    
-    /* Sidebar: Charcoal Black */
     [data-testid="stSidebar"] { background-color: #17202A !important; color: #FDFEFE !important; }
     
-    /* Order Cards: White with High Contrast Text */
     .assignment-card { 
         background: #FFFFFF; padding: 20px; border-left: 12px solid #922B21; 
         border-radius: 4px; margin-bottom: 12px; border-bottom: 2px solid #AEB6BF;
         box-shadow: 4px 4px 10px rgba(0,0,0,0.1);
         color: #17202A;
+        display: flex; align-items: center;
+    }
+
+    /* Target ID: White letters on dark gray background */
+    .id-badge {
+        background-color: #1C2833;
+        color: #FFFFFF !important;
+        padding: 6px 14px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 1.2em;
+        margin-right: 15px;
     }
     
-    /* Pill Button: Firebrick Red with Rounded Edges */
     div.stButton > button {
         background-color: #922B21 !important;
         color: white !important;
-        border-radius: 50px !important; /* The Pill Shape */
+        border-radius: 50px !important; 
         padding: 10px 24px !important;
         font-weight: bold !important;
         border: none !important;
         width: 100% !important;
     }
     
-    /* Next Best Button: Dark Gray Pill */
     .skip-btn-container div.stButton > button {
-        background-color: #2E4053 !important;
+        background-color: #566573 !important;
         font-size: 0.8em !important;
         border-radius: 20px !important;
     }
 
     h1, h2, h3 { color: #17202A; font-weight: 900; }
-    label { color: #17202A !important; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
-# State Management
 if 'skip_map' not in st.session_state: st.session_state.skip_map = {}
 if 'pedidos' not in st.session_state: st.session_state.pedidos = []
 if 'scores' not in st.session_state: st.session_state.scores = {}
@@ -108,7 +110,7 @@ with st.sidebar:
     pardon_ids = []
     for i in ALL_IDS:
         c1, c2, c3 = st.columns([2,1,1])
-        with c1: on = st.toggle(f"ID {i}", value=True, key=f"on_{i}")
+        with c1: on = st.toggle(f"Surtidor {i}", value=True, key=f"on_{i}")
         with c2: meal = st.toggle("🍴", key=f"m_{i}")
         with c3: pdr = st.checkbox("OVR", key=f"p_{i}")
         if on and not meal: active_ids.append(i)
@@ -123,7 +125,6 @@ with col3: o_in = st.text_area("3. Nuevos Pedidos", height=100)
 if st.button("💊 PROCESAR TURNOS"):
     if not o_in: st.error("No hay datos detectados.")
     else:
-        # Rotation Math
         pat = r"(\d+)[A-Z\s\.]+(\d+)"
         h_blocks = []
         for line in h_in.strip().split('\n'):
@@ -131,7 +132,6 @@ if st.button("💊 PROCESAR TURNOS"):
             if m: h_blocks.append({int(k): int(v) for k, v in m})
         t_m = re.findall(pat, t_in)
         t_counts = {int(k): int(v) for k, v in t_m if int(k) in active_ids}
-        
         st.session_state.pedidos = parse_pending(o_in)
         
         scores = {}
@@ -151,36 +151,32 @@ if st.button("💊 PROCESAR TURNOS"):
 if st.session_state.pedidos:
     st.write("---")
     st.subheader(f"Cola de Trabajo Actual ({datetime.now().strftime('%H:%M')})")
-    
     current_scores = st.session_state.scores.copy()
     last_id = None
 
     for i, p in enumerate(st.session_state.pedidos[:45]):
         skips = st.session_state.skip_map.get(p['ID'], 0)
         rotation = sorted(current_scores.items(), key=lambda x: x[1])
-        
         if not rotation: break
         
-        # Calculate who gets it based on "Next Best" clicks
         target_idx = min(skips, len(rotation) - 1)
         assigned_id = rotation[target_idx][0]
         
-        # Prevent back-to-back same ID if no skips are present
         if assigned_id == last_id and len(rotation) > 1 and target_idx == 0:
             assigned_id = rotation[1][0]
 
         current_scores[assigned_id] += 1
         last_id = assigned_id
 
-        # Row Layout
         c_chk, c_crd, c_nxt = st.columns([1, 14, 4])
         with c_chk:
             done = st.checkbox("", key=f"d_{p['ID']}_{i}")
         if not done:
             with c_crd:
                 st.markdown(f"""<div class="assignment-card">
-                    <span style="color:#922B21; font-size:1.3em; font-weight:black;">SURTIDOR {assigned_id}</span> ⮕ 
-                    <b>{p['ID']}</b> | {p['Nombre']} | {p['Piezas']} Piezas</div>""", unsafe_allow_html=True)
+                    <span class="id-badge">ID {assigned_id}</span>
+                    <span><b>{p['ID']}</b> | {p['Nombre']} | {p['Piezas']} Pzs</span>
+                    </div>""", unsafe_allow_html=True)
             with c_nxt:
                 st.markdown('<div class="skip-btn-container">', unsafe_allow_html=True)
                 if st.button("SIGUIENTE MEJOR", key=f"sk_{p['ID']}_{i}"):
