@@ -1,6 +1,7 @@
 import streamlit as st
 import re
 from datetime import datetime
+import pandas as pd
 
 # --- CONFIGURATION ---
 ALL_IDS = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -30,40 +31,21 @@ def parse_pending(raw_text):
     if not raw_text: return []
     lines = raw_text.strip().split('\n')
     orders = []
-    
     for line in lines:
         line = line.strip()
         if not line or "#N/A" in line or "CANCELADO" in line: continue
-        
-        # 1. Check if line is already assigned (has a Surtidor name/ID at the end)
-        # We split by large gaps to see if there's info in the 5th+ column
         parts = [p for p in re.split(r'\t|\s{2,}', line) if p.strip()]
         if len(parts) > 5: continue
-
-        # 2. SMART EXTRACTION (Handles smashed numbers like 6416451077)
-        # Look for the 64XXXX pattern
         match_id = re.search(r"(64\d{4})", line)
         if match_id:
             oid = match_id.group(1)
-            # Remove the ID from the string to look at what's left
             remaining = line.replace(oid, "", 1).strip()
-            
-            # Use regex to find the Priority (1-2 digits) and Pieces (1+ digits)
-            # This works even if they are stuck to words or times
             nums = re.findall(r'\d+', remaining)
-            
             if len(nums) >= 2:
-                p_raw = int(nums[0]) # First number after ID is Priority
-                items = int(nums[-1]) # Last number in line is usually Pieces
-                
+                p_raw = int(nums[0])
+                items = int(nums[-1])
                 if p_raw in PRIORITY_NAMES:
-                    orders.append({
-                        "ID": oid, 
-                        "P_Real": get_live_priority(p_raw), 
-                        "Piezas": items, 
-                        "Nombre": PRIORITY_NAMES.get(p_raw)
-                    })
-                
+                    orders.append({"ID": oid, "P_Real": get_live_priority(p_raw), "Piezas": items, "Nombre": PRIORITY_NAMES.get(p_raw)})
     return sorted(orders, key=lambda x: (x['P_Real'], -x['Piezas']))
 
 # --- UI STYLE ---
@@ -81,7 +63,11 @@ st.markdown("""
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
     div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 50px !important; padding: 10px 24px !important; font-weight: 900 !important; width: 100% !important; border: none !important; }
-    .turn-pill { background: #2E4053; color: white; padding: 4px 10px; border-radius: 20px; margin: 2px; display: inline-block; font-size: 0.8em; border: 1px solid #566573; }
+    .turn-pill { background: #2E4053; color: white; padding: 4px 8px; border-radius: 12px; margin: 2px; display: inline-block; font-size: 0.75em; border: 1px solid #566573; font-weight: bold; }
+    
+    /* Summary Table Styling */
+    .summary-box { background: #212F3C; padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px solid #34495E; }
+    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 2px 0; font-size: 0.85em; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -109,18 +95,34 @@ with st.sidebar:
         with c_e: pdr = st.checkbox("", key=f"p_{i}")
         if on and not meal: active_ids.append(i)
         if pdr: pardon_ids.append(i)
+    
+    # --- 15 TURN FORECAST ---
     st.write("---")
-    st.subheader("🔄 Próximos 10 Turnos")
+    st.subheader("🔄 Próximos 15 Turnos")
     if st.session_state.scores and active_ids:
         ts = st.session_state.scores.copy()
         turns = []
-        for _ in range(10):
+        counts = {}
+        for _ in range(15):
             vr = {k: v for k, v in ts.items() if k in active_ids}
             if not vr: break
             nid = min(vr, key=vr.get)
             turns.append(nid)
+            counts[nid] = counts.get(nid, 0) + 1
             ts[nid] += 1
-        st.markdown("".join([f'<span class="turn-pill">ID {t}</span>' for t in turns]), unsafe_allow_html=True)
+        
+        # Display Pills
+        st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
+        
+        # Display Summary Table
+        st.markdown('<div class="summary-box">', unsafe_allow_html=True)
+        st.write("**Resumen de carga (próx. 15):**")
+        sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+        for sid, count in sorted_counts:
+            st.markdown(f'<div class="summary-row"><span>ID {sid}</span> <span>{count} asignaciones</span></div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.info("Calculando carga...")
 
 # --- MAIN CONTENT ---
 st.title("📦 Panel de Control de Surtido")
@@ -132,7 +134,7 @@ with c3: o_in = st.text_area("3. Nuevos Pedidos", height=120)
 if st.button("💊 PROCESAR TURNOS"):
     parsed = parse_pending(o_in)
     if not parsed:
-        st.error("No se detectaron pedidos válidos. Asegúrate de incluir el ID 64XXXX.")
+        st.error("No se detectaron pedidos válidos.")
     else:
         st.session_state.pedidos = parsed
         pat = r"(\d+)[A-Z\s\.]+(\d+)"
