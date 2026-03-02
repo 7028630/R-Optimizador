@@ -44,66 +44,28 @@ def parse_pending(raw_text):
                 orders.append({"ID": oid, "P_Real": get_live_priority(p_int), "Piezas": int(items), "Nombre": PRIORITY_NAMES.get(p_int)})
     return sorted(orders, key=lambda x: (x['P_Real'], -x['Piezas']))
 
-# --- UI STYLE: INDUSTRIAL HIGH-CONTRAST ---
+# --- UI STYLE ---
 st.set_page_config(page_title="Surtido Pro", layout="wide")
 
 st.markdown("""
     <style>
     .stApp { background-color: #EAECEE; color: #1C2833; }
-    
-    [data-testid="stSidebar"] { 
-        background-color: #17202A !important; 
-        min-width: 380px !important;
-    }
-    
-    /* Force Sidebar White Text */
+    [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 400px !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-
-    /* HELP ICON (?) VISIBILITY */
-    [data-testid="stSidebar"] svg {
-        fill: #FFFFFF !important;
-        stroke: #FFFFFF !important;
-    }
-
-    /* TOGGLER TRACK VISIBILITY */
-    div[role="switch"] {
-        background-color: #7B7D7D !important; /* Brighter track */
-        border: 2px solid #BDC3C7 !important;
-    }
-    div[role="switch"][aria-checked="true"] {
-        background-color: #C0392B !important; /* Firebrick Red */
-    }
-
-    /* Tighter Sidebar Spacing */
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        margin-bottom: -10px !important;
-    }
-
-    .id-badge {
-        background-color: #17202A;
-        color: #FFFFFF !important;
-        padding: 8px 16px;
-        border-radius: 4px;
-        font-weight: 900;
-        font-size: 1.3em;
-        margin-right: 20px;
-        border: 1px solid #566573;
-    }
-
-    .assignment-card { 
-        background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; 
-        border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF;
-        color: #17202A; display: flex; align-items: center;
-    }
+    [data-testid="stSidebar"] svg { fill: #FFFFFF !important; width: 18px !important; height: 18px !important; }
     
-    div.stButton > button {
-        background-color: #C0392B !important;
-        color: white !important;
-        border-radius: 50px !important; 
-        padding: 10px 24px !important;
-        font-weight: 900 !important;
-        width: 100% !important;
-    }
+    /* Toggle Visibility Fix */
+    div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC347 !important; border: 2px solid #ECF0F1 !important; }
+    div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
+
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: -12px !important; }
+
+    .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
+    .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
+    div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 50px !important; padding: 10px 24px !important; font-weight: 900 !important; width: 100% !important; border: none !important; }
+    
+    /* Next Turns Styling */
+    .turn-pill { background: #2E4053; color: white; padding: 4px 10px; border-radius: 20px; margin: 2px; display: inline-block; font-size: 0.8em; border: 1px solid #566573; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -113,26 +75,51 @@ if 'scores' not in st.session_state: st.session_state.scores = {}
 
 st.title("📦 Panel de Control de Surtido")
 
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("Disponibilidad")
-    if st.button("LIMPIAR TODO"): 
+    # 1. CLEAN BUTTON AT TOP
+    if st.button("🗑️ LIMPIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
+    
+    st.header("Disponibilidad")
     st.write("---")
     h1, h2, h3 = st.columns([2,1,1])
     with h1: st.write("**Surtidor**")
     with h2: st.write("**🍴**")
     with h3: st.write("**Excepción**")
+    
     active_ids = []
     pardon_ids = []
     for i in ALL_IDS:
         c_n, c_m, c_e = st.columns([2,1,1])
         with c_n: on = st.toggle(f"ID {i}", value=True, key=f"on_{i}")
-        with c_m: meal = st.toggle("", key=f"m_{i}", help="Personal en comida")
+        with c_m: meal = st.toggle("", key=f"m_{i}", help="Personal en horario de comida")
         with c_e: pdr = st.checkbox("", key=f"p_{i}")
         if on and not meal: active_ids.append(i)
         if pdr: pardon_ids.append(i)
 
+    # 2. NEXT 10 TURNS SECTION
+    st.write("---")
+    st.subheader("🔄 Próximos 10 Turnos")
+    if not st.session_state.scores:
+        st.info("Procesa datos para ver turnos.")
+    else:
+        temp_scores = st.session_state.scores.copy()
+        next_turns = []
+        for _ in range(10):
+            # Sort by current simulated score
+            valid_rotation = {k: v for k, v in temp_scores.items() if k in active_ids}
+            if not valid_rotation: break
+            nxt_id = min(valid_rotation, key=valid_rotation.get)
+            next_turns.append(nxt_id)
+            temp_scores[nxt_id] += 1
+        
+        # Display as pills
+        turn_html = "".join([f'<span class="turn-pill">ID {tid}</span>' for tid in next_turns])
+        st.markdown(turn_html, unsafe_allow_html=True)
+
+# --- INPUT AREAS ---
 col1, col2, col3 = st.columns(3)
 with col1: h_in = st.text_area("1. Histórico", height=80)
 with col2: t_in = st.text_area("2. Totales de Hoy", height=80)
@@ -161,9 +148,12 @@ if st.button("💊 PROCESAR TURNOS"):
         for idx in scores:
             if scores[idx] == 0 and idx not in pardon_ids: scores[idx] = top + 5
         st.session_state.scores = scores
+        st.rerun()
 
+# --- QUEUE DISPLAY ---
 if st.session_state.pedidos:
     st.write("---")
+    st.subheader(f"Cola de Trabajo Actual ({datetime.now().strftime('%H:%M')})")
     current_scores = st.session_state.scores.copy()
     last_id = None
     for i, p in enumerate(st.session_state.pedidos[:50]):
