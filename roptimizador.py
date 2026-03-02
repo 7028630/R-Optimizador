@@ -28,38 +28,45 @@ def get_live_priority(p_val):
 
 def parse_pending(raw_text):
     if not raw_text: return []
-    # Replace common spreadsheet artifacts
-    clean_text = raw_text.replace("a. m.", "am").replace("p. m.", "pm")
-    lines = clean_text.strip().split('\n')
+    lines = raw_text.strip().split('\n')
     orders = []
     
     for line in lines:
         line = line.strip()
         if not line or "#N/A" in line or "CANCELADO" in line: continue
         
-        # Split by tabs or any group of 2+ spaces (common in sheet pastes)
+        # 1. Check if line is already assigned (has a Surtidor name/ID at the end)
+        # We split by large gaps to see if there's info in the 5th+ column
         parts = [p for p in re.split(r'\t|\s{2,}', line) if p.strip()]
-        
-        # IGNORE rows that already have an assignment (Usually 5+ columns in a sheet)
-        if len(parts) > 4: 
-            continue 
+        if len(parts) > 5: continue
 
-        # Regex looks for: Order(64xxx) -> Space -> Priority(1-19) -> Space -> Items
-        match = re.search(r"(64\d{4})\s+(\d{1,2})\s+(\d+)", line)
-        if match:
-            oid, p_raw, items = match.groups()
-            p_int = int(p_raw)
-            if p_int in PRIORITY_NAMES:
-                orders.append({
-                    "ID": oid, 
-                    "P_Real": get_live_priority(p_int), 
-                    "Piezas": int(items), 
-                    "Nombre": PRIORITY_NAMES.get(p_int)
-                })
+        # 2. SMART EXTRACTION (Handles smashed numbers like 6416451077)
+        # Look for the 64XXXX pattern
+        match_id = re.search(r"(64\d{4})", line)
+        if match_id:
+            oid = match_id.group(1)
+            # Remove the ID from the string to look at what's left
+            remaining = line.replace(oid, "", 1).strip()
+            
+            # Use regex to find the Priority (1-2 digits) and Pieces (1+ digits)
+            # This works even if they are stuck to words or times
+            nums = re.findall(r'\d+', remaining)
+            
+            if len(nums) >= 2:
+                p_raw = int(nums[0]) # First number after ID is Priority
+                items = int(nums[-1]) # Last number in line is usually Pieces
+                
+                if p_raw in PRIORITY_NAMES:
+                    orders.append({
+                        "ID": oid, 
+                        "P_Real": get_live_priority(p_raw), 
+                        "Piezas": items, 
+                        "Nombre": PRIORITY_NAMES.get(p_raw)
+                    })
                 
     return sorted(orders, key=lambda x: (x['P_Real'], -x['Piezas']))
 
-# --- UI STYLE: INDUSTRIAL HIGH-CONTRAST ---
+# --- UI STYLE ---
 st.set_page_config(page_title="Surtido Pro", layout="wide")
 
 st.markdown("""
@@ -67,22 +74,13 @@ st.markdown("""
     .stApp { background-color: #EAECEE; color: #1C2833; }
     [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 400px !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-    
-    /* ? Icon Visibility */
     [data-testid="stSidebar"] svg { fill: #FFFFFF !important; width: 18px !important; height: 18px !important; }
-    
-    /* Toggle Visibility - Track is Light Gray, Active is Red */
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 2px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
-
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: -12px !important; }
-
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
-    
-    /* Main Red Pill Button */
     div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 50px !important; padding: 10px 24px !important; font-weight: 900 !important; width: 100% !important; border: none !important; }
-    
     .turn-pill { background: #2E4053; color: white; padding: 4px 10px; border-radius: 20px; margin: 2px; display: inline-block; font-size: 0.8em; border: 1px solid #566573; }
     </style>
 """, unsafe_allow_html=True)
@@ -96,114 +94,86 @@ with st.sidebar:
     if st.button("🗑️ LIMPIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
-    
     st.header("Disponibilidad")
     st.write("---")
     h1, h2, h3 = st.columns([2,1,1])
     with h1: st.write("**Surtidor**")
     with h2: st.write("**🍴**")
     with h3: st.write("**Excepción**")
-    
     active_ids = []
     pardon_ids = []
     for i in ALL_IDS:
         c_n, c_m, c_e = st.columns([2,1,1])
         with c_n: on = st.toggle(f"ID {i}", value=True, key=f"on_{i}")
-        with c_m: meal = st.toggle("", key=f"m_{i}", help="Personal en horario de comida")
+        with c_m: meal = st.toggle("", key=f"m_{i}", help="Comida")
         with c_e: pdr = st.checkbox("", key=f"p_{i}")
         if on and not meal: active_ids.append(i)
         if pdr: pardon_ids.append(i)
-
     st.write("---")
     st.subheader("🔄 Próximos 10 Turnos")
     if st.session_state.scores and active_ids:
-        temp_scores = st.session_state.scores.copy()
-        next_turns = []
+        ts = st.session_state.scores.copy()
+        turns = []
         for _ in range(10):
-            valid_rotation = {k: v for k, v in temp_scores.items() if k in active_ids}
-            if not valid_rotation: break
-            nxt_id = min(valid_rotation, key=valid_rotation.get)
-            next_turns.append(nxt_id)
-            temp_scores[nxt_id] += 1
-        
-        turn_html = "".join([f'<span class="turn-pill">ID {tid}</span>' for tid in next_turns])
-        st.markdown(turn_html, unsafe_allow_html=True)
+            vr = {k: v for k, v in ts.items() if k in active_ids}
+            if not vr: break
+            nid = min(vr, key=vr.get)
+            turns.append(nid)
+            ts[nid] += 1
+        st.markdown("".join([f'<span class="turn-pill">ID {t}</span>' for t in turns]), unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
 st.title("📦 Panel de Control de Surtido")
-
-col1, col2, col3 = st.columns(3)
-with col1: h_in = st.text_area("1. Histórico", height=80, placeholder="Pega histórico aquí...")
-with col2: t_in = st.text_area("2. Totales de Hoy", height=80, placeholder="Pega totales aquí...")
-with col3: o_in = st.text_area("3. Nuevos Pedidos", height=120, placeholder="Pega pedidos sin asignar...")
+c1, c2, c3 = st.columns(3)
+with c1: h_in = st.text_area("1. Histórico", height=80)
+with c2: t_in = st.text_area("2. Totales de Hoy", height=80)
+with c3: o_in = st.text_area("3. Nuevos Pedidos", height=120)
 
 if st.button("💊 PROCESAR TURNOS"):
-    # Force process even if some fields are empty, as long as New Orders exist
-    if not o_in.strip():
-        st.warning("No hay pedidos nuevos para procesar.")
+    parsed = parse_pending(o_in)
+    if not parsed:
+        st.error("No se detectaron pedidos válidos. Asegúrate de incluir el ID 64XXXX.")
     else:
-        # 1. Parse New Orders first
-        parsed_orders = parse_pending(o_in)
-        if not parsed_orders:
-            st.error("No se detectaron pedidos válidos. Verifica el formato (64XXXX Pzs).")
-        else:
-            st.session_state.pedidos = parsed_orders
-            
-            # 2. Calculate scores from History/Totals
-            pat = r"(\d+)[A-Z\s\.]+(\d+)"
-            h_blocks = []
-            for line in h_in.strip().split('\n'):
-                m = re.findall(pat, line)
-                if m: h_blocks.append({int(k): int(v) for k, v in m})
-            
-            t_m = re.findall(pat, t_in)
-            t_counts = {int(k): int(v) for k, v in t_m if int(k) in active_ids}
-            
-            scores = {}
-            temp_sums = [sum(b.values()) for b in h_blocks if b]
-            avg = sum(temp_sums) / len(temp_sums) if temp_sums else 0
-            top = 0
-            for idx in active_ids:
-                is_new = len(h_blocks) >= 3 and sum([b.get(idx, 0) for b in h_blocks[-3:]]) == 0
-                h_sum = sum(b.get(idx, 0) for b in h_blocks)
-                scores[idx] = (int(avg / len(ALL_IDS)) if (idx in pardon_ids or is_new) else h_sum) + t_counts.get(idx, 0)
-                top = max(top, scores[idx])
-            
-            for idx in scores:
-                if scores[idx] == 0 and idx not in pardon_ids: scores[idx] = top + 5
-            
-            st.session_state.scores = scores
-            st.success(f"Procesados {len(parsed_orders)} pedidos.")
-            st.rerun()
+        st.session_state.pedidos = parsed
+        pat = r"(\d+)[A-Z\s\.]+(\d+)"
+        h_blocks = []
+        for line in h_in.strip().split('\n'):
+            m = re.findall(pat, line)
+            if m: h_blocks.append({int(k): int(v) for k, v in m})
+        t_m = re.findall(pat, t_in)
+        t_counts = {int(k): int(v) for k, v in t_m if int(k) in active_ids}
+        scores = {}
+        temp_sums = [sum(b.values()) for b in h_blocks if b]
+        avg = sum(temp_sums) / len(temp_sums) if temp_sums else 0
+        top = 0
+        for idx in active_ids:
+            is_new = len(h_blocks) >= 3 and sum([b.get(idx, 0) for b in h_blocks[-3:]]) == 0
+            h_sum = sum(b.get(idx, 0) for b in h_blocks)
+            scores[idx] = (int(avg / len(ALL_IDS)) if (idx in pardon_ids or is_new) else h_sum) + t_counts.get(idx, 0)
+            top = max(top, scores[idx])
+        for idx in scores:
+            if scores[idx] == 0 and idx not in pardon_ids: scores[idx] = top + 5
+        st.session_state.scores = scores
+        st.rerun()
 
-# --- DISPLAY QUEUE ---
 if st.session_state.pedidos:
     st.write("---")
-    st.subheader(f"Cola de Trabajo Actual")
-    current_scores = st.session_state.scores.copy()
-    last_id = None
-    
+    cs = st.session_state.scores.copy()
+    lid = None
     for i, p in enumerate(st.session_state.pedidos[:50]):
-        skips = st.session_state.skip_map.get(p['ID'], 0)
-        rotation = sorted(current_scores.items(), key=lambda x: x[1])
-        if not rotation: break
-        
-        target_idx = min(skips, len(rotation) - 1)
-        assigned_id = rotation[target_idx][0]
-        
-        if assigned_id == last_id and len(rotation) > 1 and target_idx == 0:
-            assigned_id = rotation[1][0]
-            
-        current_scores[assigned_id] += 1
-        last_id = assigned_id
-        
-        c_chk, c_crd, c_nxt = st.columns([1, 14, 4])
-        with c_chk: 
-            done = st.checkbox("", key=f"d_{p['ID']}_{i}")
+        sk = st.session_state.skip_map.get(p['ID'], 0)
+        rot = sorted(cs.items(), key=lambda x: x[1])
+        if not rot: break
+        t_idx = min(sk, len(rot) - 1)
+        aid = rot[t_idx][0]
+        if aid == lid and len(rot) > 1 and t_idx == 0: aid = rot[1][0]
+        cs[aid] += 1
+        lid = aid
+        chk, crd, nxt = st.columns([1, 14, 4])
+        with chk: done = st.checkbox("", key=f"d_{p['ID']}_{i}")
         if not done:
-            with c_crd:
-                st.markdown(f'<div class="assignment-card"><span class="id-badge">ID {assigned_id}</span><span><b>{p["ID"]}</b> | {p["Nombre"]} | {p["Piezas"]} Pzs</span></div>', unsafe_allow_html=True)
-            with c_nxt:
-                if st.button("SIGUIENTE MEJOR", key=f"sk_{p['ID']}_{i}"):
-                    st.session_state.skip_map[p['ID']] = skips + 1
+            with crd: st.markdown(f'<div class="assignment-card"><span class="id-badge">ID {aid}</span><span><b>{p["ID"]}</b> | {p["Nombre"]} | {p["Piezas"]} Pzs</span></div>', unsafe_allow_html=True)
+            with nxt:
+                if st.button("SIGUIENTE", key=f"sk_{p['ID']}_{i}"):
+                    st.session_state.skip_map[p['ID']] = sk + 1
                     st.rerun()
