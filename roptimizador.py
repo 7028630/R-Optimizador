@@ -54,32 +54,31 @@ st.markdown("""
     <style>
     .stApp { background-color: #EAECEE; color: #1C2833; }
     
-    /* Sidebar Area */
     [data-testid="stSidebar"] { 
         background-color: #17202A !important; 
         min-width: 420px !important; 
     }
     
-    /* Bigger text for labels in sidebar (Surtidor ID, toggles, etc.) */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
+    /* Global White Text for Sidebar Elements */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span {
         color: #FFFFFF !important;
+    }
+
+    /* Sidebar Content Font Size */
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
         font-size: 1.15rem !important; 
         font-weight: 500 !important;
     }
 
-    /* Keep Sidebar Headers/Buttons at their designed size */
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        font-size: 1.5rem !important;
-    }
-
     [data-testid="stSidebar"] svg { fill: #FFFFFF !important; width: 20px !important; height: 20px !important; }
     
-    /* Toggles */
+    /* Toggle Visibility */
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 2px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: -10px !important; }
 
-    /* Summary Box Fix */
+    /* Summary Box with Forced White Text */
     .summary-box { 
         background-color: #212F3C; 
         padding: 15px; 
@@ -87,22 +86,27 @@ st.markdown("""
         margin-top: 20px; 
         border: 1px solid #34495E;
         display: block;
+        color: #FFFFFF !important;
     }
     .summary-title {
         font-weight: bold;
-        font-size: 1rem !important;
-        margin-bottom: 8px;
-        color: #ECF0F1;
+        font-size: 1.1rem !important;
+        margin-bottom: 10px;
+        color: #FFFFFF !important;
     }
     .summary-row { 
         display: flex; 
         justify-content: space-between; 
         border-bottom: 1px solid #2C3E50; 
-        padding: 4px 0; 
-        font-size: 1rem !important; 
+        padding: 6px 0; 
+        font-size: 1.1rem !important;
+        color: #FFFFFF !important;
+    }
+    .summary-row span {
+        color: #FFFFFF !important;
     }
 
-    /* Main Cards */
+    /* Main Display */
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
     
@@ -155,7 +159,7 @@ with st.sidebar:
         
         st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
         
-        # Fixed Summary Container
+        # Summary Container with white text forced
         summary_html = '<div class="summary-box"><div class="summary-title">Resumen de carga (próx. 20):</div>'
         sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
         for sid, count in sorted_counts:
