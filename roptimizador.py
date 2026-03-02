@@ -28,7 +28,7 @@ def get_live_priority(p_val):
 
 def parse_pending(raw_text):
     if not raw_text: return []
-    # Clean up standard AM/PM formatting for regex
+    # Replace common spreadsheet artifacts
     clean_text = raw_text.replace("a. m.", "am").replace("p. m.", "pm")
     lines = clean_text.strip().split('\n')
     orders = []
@@ -37,16 +37,14 @@ def parse_pending(raw_text):
         line = line.strip()
         if not line or "#N/A" in line or "CANCELADO" in line: continue
         
-        # Split by tabs or multiple spaces to count columns
-        parts = re.split(r'\t|\s{2,}', line)
+        # Split by tabs or any group of 2+ spaces (common in sheet pastes)
+        parts = [p for p in re.split(r'\t|\s{2,}', line) if p.strip()]
         
-        # STRICT FILTER: 
-        # If the line has more than 4 columns, it likely contains 
-        # an assigned Surtidor ID or Name. We skip these.
+        # IGNORE rows that already have an assignment (Usually 5+ columns in a sheet)
         if len(parts) > 4: 
             continue 
 
-        # Extract: Order ID (64XXXX), Priority (1-19), and Items (Digit)
+        # Regex looks for: Order(64xxx) -> Space -> Priority(1-19) -> Space -> Items
         match = re.search(r"(64\d{4})\s+(\d{1,2})\s+(\d+)", line)
         if match:
             oid, p_raw, items = match.groups()
@@ -59,10 +57,9 @@ def parse_pending(raw_text):
                     "Nombre": PRIORITY_NAMES.get(p_int)
                 })
                 
-    # Sort by Priority (Low to High) and then by most items
     return sorted(orders, key=lambda x: (x['P_Real'], -x['Piezas']))
 
-# --- UI STYLE ---
+# --- UI STYLE: INDUSTRIAL HIGH-CONTRAST ---
 st.set_page_config(page_title="Surtido Pro", layout="wide")
 
 st.markdown("""
@@ -70,9 +67,11 @@ st.markdown("""
     .stApp { background-color: #EAECEE; color: #1C2833; }
     [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 400px !important; }
     [data-testid="stSidebar"] * { color: #FFFFFF !important; }
+    
+    /* ? Icon Visibility */
     [data-testid="stSidebar"] svg { fill: #FFFFFF !important; width: 18px !important; height: 18px !important; }
     
-    /* Toggle Visibility */
+    /* Toggle Visibility - Track is Light Gray, Active is Red */
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 2px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
 
@@ -80,6 +79,8 @@ st.markdown("""
 
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
+    
+    /* Main Red Pill Button */
     div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 50px !important; padding: 10px 24px !important; font-weight: 900 !important; width: 100% !important; border: none !important; }
     
     .turn-pill { background: #2E4053; color: white; padding: 4px 10px; border-radius: 20px; margin: 2px; display: inline-block; font-size: 0.8em; border: 1px solid #566573; }
@@ -115,7 +116,7 @@ with st.sidebar:
 
     st.write("---")
     st.subheader("🔄 Próximos 10 Turnos")
-    if st.session_state.scores:
+    if st.session_state.scores and active_ids:
         temp_scores = st.session_state.scores.copy()
         next_turns = []
         for _ in range(10):
@@ -127,51 +128,58 @@ with st.sidebar:
         
         turn_html = "".join([f'<span class="turn-pill">ID {tid}</span>' for tid in next_turns])
         st.markdown(turn_html, unsafe_allow_html=True)
-    else:
-        st.info("Ingresa datos para ver el orden.")
 
 # --- MAIN CONTENT ---
 st.title("📦 Panel de Control de Surtido")
 
 col1, col2, col3 = st.columns(3)
-with col1: h_in = st.text_area("1. Histórico", height=80)
-with col2: t_in = st.text_area("2. Totales de Hoy", height=80)
-with col3: o_in = st.text_area("3. Nuevos Pedidos", height=120)
+with col1: h_in = st.text_area("1. Histórico", height=80, placeholder="Pega histórico aquí...")
+with col2: t_in = st.text_area("2. Totales de Hoy", height=80, placeholder="Pega totales aquí...")
+with col3: o_in = st.text_area("3. Nuevos Pedidos", height=120, placeholder="Pega pedidos sin asignar...")
 
 if st.button("💊 PROCESAR TURNOS"):
-    if not o_in: st.error("No hay pedidos pendientes detectados.")
+    # Force process even if some fields are empty, as long as New Orders exist
+    if not o_in.strip():
+        st.warning("No hay pedidos nuevos para procesar.")
     else:
-        pat = r"(\d+)[A-Z\s\.]+(\d+)"
-        h_blocks = []
-        for line in h_in.strip().split('\n'):
-            m = re.findall(pat, line)
-            if m: h_blocks.append({int(k): int(v) for k, v in m})
-        
-        t_m = re.findall(pat, t_in)
-        t_counts = {int(k): int(v) for k, v in t_m if int(k) in active_ids}
-        
-        # The new strict filter is inside this function
-        st.session_state.pedidos = parse_pending(o_in)
-        
-        # Score calculation logic
-        scores = {}
-        temp_sums = [sum(b.values()) for b in h_blocks if b]
-        avg = sum(temp_sums) / len(temp_sums) if temp_sums else 0
-        top = 0
-        for idx in active_ids:
-            is_new = len(h_blocks) >= 3 and sum([b.get(idx, 0) for b in h_blocks[-3:]]) == 0
-            h_sum = sum(b.get(idx, 0) for b in h_blocks)
-            scores[idx] = (int(avg / len(ALL_IDS)) if (idx in pardon_ids or is_new) else h_sum) + t_counts.get(idx, 0)
-            top = max(top, scores[idx])
-        for idx in scores:
-            if scores[idx] == 0 and idx not in pardon_ids: scores[idx] = top + 5
-        
-        st.session_state.scores = scores
-        st.rerun()
+        # 1. Parse New Orders first
+        parsed_orders = parse_pending(o_in)
+        if not parsed_orders:
+            st.error("No se detectaron pedidos válidos. Verifica el formato (64XXXX Pzs).")
+        else:
+            st.session_state.pedidos = parsed_orders
+            
+            # 2. Calculate scores from History/Totals
+            pat = r"(\d+)[A-Z\s\.]+(\d+)"
+            h_blocks = []
+            for line in h_in.strip().split('\n'):
+                m = re.findall(pat, line)
+                if m: h_blocks.append({int(k): int(v) for k, v in m})
+            
+            t_m = re.findall(pat, t_in)
+            t_counts = {int(k): int(v) for k, v in t_m if int(k) in active_ids}
+            
+            scores = {}
+            temp_sums = [sum(b.values()) for b in h_blocks if b]
+            avg = sum(temp_sums) / len(temp_sums) if temp_sums else 0
+            top = 0
+            for idx in active_ids:
+                is_new = len(h_blocks) >= 3 and sum([b.get(idx, 0) for b in h_blocks[-3:]]) == 0
+                h_sum = sum(b.get(idx, 0) for b in h_blocks)
+                scores[idx] = (int(avg / len(ALL_IDS)) if (idx in pardon_ids or is_new) else h_sum) + t_counts.get(idx, 0)
+                top = max(top, scores[idx])
+            
+            for idx in scores:
+                if scores[idx] == 0 and idx not in pardon_ids: scores[idx] = top + 5
+            
+            st.session_state.scores = scores
+            st.success(f"Procesados {len(parsed_orders)} pedidos.")
+            st.rerun()
 
+# --- DISPLAY QUEUE ---
 if st.session_state.pedidos:
     st.write("---")
-    st.subheader(f"Cola de Trabajo Actual ({datetime.now().strftime('%H:%M')})")
+    st.subheader(f"Cola de Trabajo Actual")
     current_scores = st.session_state.scores.copy()
     last_id = None
     
