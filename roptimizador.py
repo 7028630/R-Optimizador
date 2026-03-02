@@ -1,7 +1,6 @@
 import streamlit as st
 import re
 from datetime import datetime
-import pandas as pd
 
 # --- CONFIGURATION ---
 ALL_IDS = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -54,20 +53,62 @@ st.set_page_config(page_title="Surtido Pro", layout="wide")
 st.markdown("""
     <style>
     .stApp { background-color: #EAECEE; color: #1C2833; }
-    [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 400px !important; }
-    [data-testid="stSidebar"] * { color: #FFFFFF !important; }
-    [data-testid="stSidebar"] svg { fill: #FFFFFF !important; width: 18px !important; height: 18px !important; }
+    
+    /* Sidebar Area */
+    [data-testid="stSidebar"] { 
+        background-color: #17202A !important; 
+        min-width: 420px !important; 
+    }
+    
+    /* Bigger text for labels in sidebar (Surtidor ID, toggles, etc.) */
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
+        color: #FFFFFF !important;
+        font-size: 1.15rem !important; 
+        font-weight: 500 !important;
+    }
+
+    /* Keep Sidebar Headers/Buttons at their designed size */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+        font-size: 1.5rem !important;
+    }
+
+    [data-testid="stSidebar"] svg { fill: #FFFFFF !important; width: 20px !important; height: 20px !important; }
+    
+    /* Toggles */
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 2px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: -12px !important; }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: -10px !important; }
+
+    /* Summary Box Fix */
+    .summary-box { 
+        background-color: #212F3C; 
+        padding: 15px; 
+        border-radius: 10px; 
+        margin-top: 20px; 
+        border: 1px solid #34495E;
+        display: block;
+    }
+    .summary-title {
+        font-weight: bold;
+        font-size: 1rem !important;
+        margin-bottom: 8px;
+        color: #ECF0F1;
+    }
+    .summary-row { 
+        display: flex; 
+        justify-content: space-between; 
+        border-bottom: 1px solid #2C3E50; 
+        padding: 4px 0; 
+        font-size: 1rem !important; 
+    }
+
+    /* Main Cards */
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
-    div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 50px !important; padding: 10px 24px !important; font-weight: 900 !important; width: 100% !important; border: none !important; }
-    .turn-pill { background: #2E4053; color: white; padding: 4px 8px; border-radius: 12px; margin: 2px; display: inline-block; font-size: 0.75em; border: 1px solid #566573; font-weight: bold; }
     
-    /* Summary Table Styling */
-    .summary-box { background: #212F3C; padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px solid #34495E; }
-    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 2px 0; font-size: 0.85em; }
+    div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 50px !important; padding: 10px 24px !important; font-weight: 900 !important; width: 100% !important; border: none !important; }
+    
+    .turn-pill { background: #E74C3C; color: white; padding: 4px 10px; border-radius: 8px; margin: 3px; display: inline-block; font-size: 0.85rem; border: 1px solid #566573; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -85,7 +126,8 @@ with st.sidebar:
     h1, h2, h3 = st.columns([2,1,1])
     with h1: st.write("**Surtidor**")
     with h2: st.write("**🍴**")
-    with h3: st.write("**Excepción**")
+    with h3: st.write("**Exc.**")
+    
     active_ids = []
     pardon_ids = []
     for i in ALL_IDS:
@@ -96,14 +138,14 @@ with st.sidebar:
         if on and not meal: active_ids.append(i)
         if pdr: pardon_ids.append(i)
     
-    # --- 15 TURN FORECAST ---
+    # --- 20 TURN FORECAST ---
     st.write("---")
-    st.subheader("🔄 Próximos 15 Turnos")
+    st.subheader("🔄 Próximos 20 Turnos")
     if st.session_state.scores and active_ids:
         ts = st.session_state.scores.copy()
         turns = []
         counts = {}
-        for _ in range(15):
+        for _ in range(20):
             vr = {k: v for k, v in ts.items() if k in active_ids}
             if not vr: break
             nid = min(vr, key=vr.get)
@@ -111,18 +153,17 @@ with st.sidebar:
             counts[nid] = counts.get(nid, 0) + 1
             ts[nid] += 1
         
-        # Display Pills
         st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
         
-        # Display Summary Table
-        st.markdown('<div class="summary-box">', unsafe_allow_html=True)
-        st.write("**Resumen de carga (próx. 15):**")
+        # Fixed Summary Container
+        summary_html = '<div class="summary-box"><div class="summary-title">Resumen de carga (próx. 20):</div>'
         sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
         for sid, count in sorted_counts:
-            st.markdown(f'<div class="summary-row"><span>ID {sid}</span> <span>{count} asignaciones</span></div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+            summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} turnos</span></div>'
+        summary_html += '</div>'
+        st.markdown(summary_html, unsafe_allow_html=True)
     else:
-        st.info("Calculando carga...")
+        st.info("Sin datos de turnos.")
 
 # --- MAIN CONTENT ---
 st.title("📦 Panel de Control de Surtido")
