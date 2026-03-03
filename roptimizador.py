@@ -3,7 +3,8 @@ import re
 from datetime import datetime
 
 # --- CONFIGURATION ---
-ALL_IDS = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12]
+# Added 13 and 14 to the master list
+ALL_IDS = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
 PRIORITY_NAMES = {
     1: "Local Urgente (1)", 2: "Local Urgente (2)",
@@ -44,7 +45,13 @@ def parse_pending(raw_text):
                 p_raw = int(nums[0])
                 items = int(nums[-1])
                 if p_raw in PRIORITY_NAMES:
-                    orders.append({"ID": oid, "P_Real": get_live_priority(p_raw), "Piezas": items, "Nombre": PRIORITY_NAMES.get(p_raw)})
+                    orders.append({
+                        "ID": oid, 
+                        "P_Original": p_raw,
+                        "P_Real": get_live_priority(p_raw), 
+                        "Piezas": items, 
+                        "Nombre": PRIORITY_NAMES.get(p_raw)
+                    })
     return sorted(orders, key=lambda x: (x['P_Real'], -x['Piezas']))
 
 # --- UI STYLE ---
@@ -53,65 +60,17 @@ st.set_page_config(page_title="Surtido Pro", layout="wide")
 st.markdown("""
     <style>
     .stApp { background-color: #EAECEE; color: #1C2833; }
-    
-    [data-testid="stSidebar"] { 
-        background-color: #17202A !important; 
-        min-width: 420px !important; 
-    }
-    
-    /* Global White Text for Sidebar Elements */
+    [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 420px !important; }
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span {
-        color: #FFFFFF !important;
-    }
-
-    /* Sidebar Content Font Size */
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
-        font-size: 1.15rem !important; 
-        font-weight: 500 !important;
-    }
-
-    [data-testid="stSidebar"] svg { fill: #FFFFFF !important; width: 20px !important; height: 20px !important; }
-    
-    /* Toggle Visibility */
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label { font-size: 1.15rem !important; font-weight: 500 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 2px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: -10px !important; }
-
-    /* Summary Box with Forced White Text */
-    .summary-box { 
-        background-color: #212F3C; 
-        padding: 15px; 
-        border-radius: 10px; 
-        margin-top: 20px; 
-        border: 1px solid #34495E;
-        display: block;
-        color: #FFFFFF !important;
-    }
-    .summary-title {
-        font-weight: bold;
-        font-size: 1.1rem !important;
-        margin-bottom: 10px;
-        color: #FFFFFF !important;
-    }
-    .summary-row { 
-        display: flex; 
-        justify-content: space-between; 
-        border-bottom: 1px solid #2C3E50; 
-        padding: 6px 0; 
-        font-size: 1.1rem !important;
-        color: #FFFFFF !important;
-    }
-    .summary-row span {
-        color: #FFFFFF !important;
-    }
-
-    /* Main Display */
+    .summary-box { background-color: #212F3C; padding: 15px; border-radius: 10px; margin-top: 20px; border: 1px solid #34495E; color: #FFFFFF !important; }
+    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 6px 0; font-size: 1.1rem !important; }
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
-    
     div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 50px !important; padding: 10px 24px !important; font-weight: 900 !important; width: 100% !important; border: none !important; }
-    
     .turn-pill { background: #E74C3C; color: white; padding: 4px 10px; border-radius: 8px; margin: 3px; display: inline-block; font-size: 0.85rem; border: 1px solid #566573; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
@@ -137,37 +96,25 @@ with st.sidebar:
     for i in ALL_IDS:
         c_n, c_m, c_e = st.columns([2,1,1])
         with c_n: on = st.toggle(f"ID {i}", value=True, key=f"on_{i}")
-        with c_m: meal = st.toggle("", key=f"m_{i}", help="Comida")
+        with c_m: meal = st.toggle("", key=f"m_{i}")
         with c_e: pdr = st.checkbox("", key=f"p_{i}")
         if on and not meal: active_ids.append(i)
         if pdr: pardon_ids.append(i)
     
-    # --- 20 TURN FORECAST ---
     st.write("---")
     st.subheader("🔄 Próximos 20 Turnos")
     if st.session_state.scores and active_ids:
-        ts = st.session_state.scores.copy()
-        turns = []
-        counts = {}
+        ts, turns, counts = st.session_state.scores.copy(), [], {}
         for _ in range(20):
             vr = {k: v for k, v in ts.items() if k in active_ids}
             if not vr: break
-            nid = min(vr, key=vr.get)
-            turns.append(nid)
-            counts[nid] = counts.get(nid, 0) + 1
-            ts[nid] += 1
-        
+            nid = min(vr, key=vr.get); turns.append(nid)
+            counts[nid] = counts.get(nid, 0) + 1; ts[nid] += 1
         st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
-        
-        # Summary Container with white text forced
-        summary_html = '<div class="summary-box"><div class="summary-title">Resumen de carga (próx. 20):</div>'
-        sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
-        for sid, count in sorted_counts:
+        summary_html = '<div class="summary-box"><b>Resumen (próx. 20):</b>'
+        for sid, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
             summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} turnos</span></div>'
-        summary_html += '</div>'
-        st.markdown(summary_html, unsafe_allow_html=True)
-    else:
-        st.info("Sin datos de turnos.")
+        st.markdown(summary_html + '</div>', unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
 st.title("📦 Panel de Control de Surtido")
@@ -178,8 +125,7 @@ with c3: o_in = st.text_area("3. Nuevos Pedidos", height=120)
 
 if st.button("💊 PROCESAR TURNOS"):
     parsed = parse_pending(o_in)
-    if not parsed:
-        st.error("No se detectaron pedidos válidos.")
+    if not parsed: st.error("No se detectaron pedidos válidos.")
     else:
         st.session_state.pedidos = parsed
         pat = r"(\d+)[A-Z\s\.]+(\d+)"
@@ -187,8 +133,7 @@ if st.button("💊 PROCESAR TURNOS"):
         for line in h_in.strip().split('\n'):
             m = re.findall(pat, line)
             if m: h_blocks.append({int(k): int(v) for k, v in m})
-        t_m = re.findall(pat, t_in)
-        t_counts = {int(k): int(v) for k, v in t_m if int(k) in active_ids}
+        t_counts = {int(k): int(v) for k, v in re.findall(pat, t_in) if int(k) in active_ids}
         scores = {}
         temp_sums = [sum(b.values()) for b in h_blocks if b]
         avg = sum(temp_sums) / len(temp_sums) if temp_sums else 0
@@ -205,6 +150,15 @@ if st.button("💊 PROCESAR TURNOS"):
 
 if st.session_state.pedidos:
     st.write("---")
+    st.subheader("🔍 Filtros de Visualización")
+    f_col1, f_col2 = st.columns(2)
+    with f_col1:
+        all_names = sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
+        sel_names = st.multiselect("Filtrar por Categoría", all_names, default=all_names)
+    with f_col2:
+        all_prios = sorted(list(set(p['P_Original'] for p in st.session_state.pedidos)))
+        sel_prios = st.multiselect("Filtrar por Prioridad (#)", all_prios, default=all_prios)
+
     cs = st.session_state.scores.copy()
     lid = None
     for i, p in enumerate(st.session_state.pedidos[:50]):
@@ -216,11 +170,12 @@ if st.session_state.pedidos:
         if aid == lid and len(rot) > 1 and t_idx == 0: aid = rot[1][0]
         cs[aid] += 1
         lid = aid
-        chk, crd, nxt = st.columns([1, 14, 4])
-        with chk: done = st.checkbox("", key=f"d_{p['ID']}_{i}")
-        if not done:
-            with crd: st.markdown(f'<div class="assignment-card"><span class="id-badge">ID {aid}</span><span><b>{p["ID"]}</b> | {p["Nombre"]} | {p["Piezas"]} Pzs</span></div>', unsafe_allow_html=True)
-            with nxt:
-                if st.button("SIGUIENTE", key=f"sk_{p['ID']}_{i}"):
-                    st.session_state.skip_map[p['ID']] = sk + 1
-                    st.rerun()
+        if p['Nombre'] in sel_names and p['P_Original'] in sel_prios:
+            chk, crd, nxt = st.columns([1, 14, 4])
+            with chk: done = st.checkbox("", key=f"d_{p['ID']}_{i}")
+            if not done:
+                with crd: st.markdown(f'<div class="assignment-card"><span class="id-badge">ID {aid}</span><span><b>{p["ID"]}</b> | {p["Nombre"]} | {p["Piezas"]} Pzs</span></div>', unsafe_allow_html=True)
+                with nxt:
+                    if st.button("SIGUIENTE", key=f"sk_{p['ID']}_{i}"):
+                        st.session_state.skip_map[p['ID']] = sk + 1
+                        st.rerun()
