@@ -53,30 +53,30 @@ st.set_page_config(page_title="Surtido Pro", layout="wide")
 st.markdown("""
     <style>
     .stApp { background-color: #EAECEE; color: #1C2833; }
-    [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 450px !important; }
+    [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 420px !important; }
     
+    /* White text for sidebar */
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { 
+        color: #FFFFFF !important; 
+    }
     
-    /* REASONABLE SPACING */
+    /* Word-Sheet Spacing (1.5 line height feel) */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        margin-bottom: -10px !important;
+        margin-bottom: 8px !important;
+        padding-top: 4px !important;
     }
     
     [data-testid="stSidebar"] label p {
         font-size: 1.1rem !important;
-        font-weight: bold !important;
     }
 
-    /* Toggle Colors */
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 1px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
-
-    /* Summary Box */
-    .summary-box { background-color: #212F3C; padding: 12px; border-radius: 8px; margin-top: 25px; border: 1px solid #34495E; color: #FFFFFF !important; }
-    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 4px 0; font-size: 1rem !important; }
     
-    /* Main Cards */
+    .summary-box { background-color: #212F3C; padding: 15px; border-radius: 10px; margin-top: 30px; border: 1px solid #34495E; color: #FFFFFF !important; }
+    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 6px 0; font-size: 1.1rem !important; }
+    
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
     div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 50px !important; padding: 10px 24px !important; font-weight: 900 !important; width: 100% !important; border: none !important; }
@@ -98,20 +98,22 @@ with st.sidebar:
     
     active_ids, pardon_ids = [], []
     
-    # Split IDs into two columns for better fit
-    col_left, col_right = st.columns(2)
+    # Clean Header
+    h1, h2, h3 = st.columns([2.2, 1, 1])
+    with h1: st.write("**ID Surtidor**")
+    with h2: st.write("**🍴**")
+    with h3: st.write("**Exc.**")
+
+    # Single row per person with "Word" spacing
+    for sid in ALL_IDS:
+        c1, c2, c3 = st.columns([2.2, 1, 1])
+        with c1: on = st.toggle(f"ID {sid}", value=True, key=f"on_{sid}")
+        with c2: meal = st.toggle("", key=f"m_{sid}")
+        with c3: pdr = st.checkbox("", key=f"p_{sid}")
+        if on and not meal: active_ids.append(sid)
+        if pdr: pardon_ids.append(sid)
     
-    for i, sid in enumerate(ALL_IDS):
-        target_col = col_left if i % 2 == 0 else col_right
-        with target_col:
-            st.write(f"**ID {sid}**")
-            on = st.toggle("On", value=True, key=f"on_{sid}")
-            meal = st.toggle("🍴", key=f"m_{sid}")
-            pdr = st.checkbox("Exc.", key=f"p_{sid}")
-            st.write("---")
-            if on and not meal: active_ids.append(sid)
-            if pdr: pardon_ids.append(sid)
-    
+    st.write("---")
     st.subheader("🔄 Próximos 20 Turnos")
     if st.session_state.scores and active_ids:
         ts, turns, counts = st.session_state.scores.copy(), [], {}
@@ -160,7 +162,7 @@ if st.button("💊 PROCESAR TURNOS"):
 
 if st.session_state.pedidos:
     st.write("---")
-    st.subheader("🔍 Filtros")
+    st.subheader("🔍 Filtros de Visualización")
     f1, f2 = st.columns(2)
     with f1:
         names = sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
