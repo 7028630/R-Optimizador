@@ -55,20 +55,20 @@ st.markdown("""
     .stApp { background-color: #EAECEE; color: #1C2833; }
     [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 420px !important; }
     
-    /* White text for sidebar */
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { 
         color: #FFFFFF !important; 
     }
     
-    /* Word-Sheet Spacing (1.5 line height feel) */
+    /* Horizontal Row Spacing */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        margin-bottom: 8px !important;
-        padding-top: 4px !important;
+        margin-bottom: 2px !important;
+        padding-top: 2px !important;
     }
     
-    [data-testid="stSidebar"] label p {
-        font-size: 1.1rem !important;
+    /* Force widgets in sidebar to be compact */
+    [data-testid="stSidebar"] .stCheckbox, [data-testid="stSidebar"] .stToggle {
+        margin-bottom: 0px !important;
     }
 
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 1px solid #ECF0F1 !important; }
@@ -98,18 +98,21 @@ with st.sidebar:
     
     active_ids, pardon_ids = [], []
     
-    # Clean Header
-    h1, h2, h3 = st.columns([2.2, 1, 1])
-    with h1: st.write("**ID Surtidor**")
-    with h2: st.write("**🍴**")
-    with h3: st.write("**Exc.**")
+    # Updated Header Columns
+    h1, h2, h3, h4 = st.columns([1.5, 1.2, 1, 1])
+    with h1: st.write("**Surtidor**")
+    with h2: st.write("**On**")
+    with h3: st.write("**🍴**")
+    with h4: st.write("**Exc.**")
 
-    # Single row per person with "Word" spacing
+    # Each surtidor is now strictly one row
     for sid in ALL_IDS:
-        c1, c2, c3 = st.columns([2.2, 1, 1])
-        with c1: on = st.toggle(f"ID {sid}", value=True, key=f"on_{sid}")
-        with c2: meal = st.toggle("", key=f"m_{sid}")
-        with c3: pdr = st.checkbox("", key=f"p_{sid}")
+        c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
+        with c1: st.write(f"ID {sid}")
+        with c2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
+        with c3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
+        with c4: pdr = st.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
+        
         if on and not meal: active_ids.append(sid)
         if pdr: pardon_ids.append(sid)
     
@@ -128,7 +131,7 @@ with st.sidebar:
             summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} turnos</span></div>'
         st.markdown(summary_html + '</div>', unsafe_allow_html=True)
 
-# --- MAIN CONTENT ---
+# --- MAIN CONTENT (Same as before) ---
 st.title("📦 Panel de Control de Surtido")
 c1, c2, c3 = st.columns(3)
 with c1: h_in = st.text_area("1. Histórico", height=80)
@@ -162,7 +165,7 @@ if st.button("💊 PROCESAR TURNOS"):
 
 if st.session_state.pedidos:
     st.write("---")
-    st.subheader("🔍 Filtros de Visualización")
+    st.subheader("🔍 Filtros")
     f1, f2 = st.columns(2)
     with f1:
         names = sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
