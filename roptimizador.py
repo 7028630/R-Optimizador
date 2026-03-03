@@ -57,7 +57,7 @@ st.markdown("""
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     
-    /* Compact Sidebar Rows - Locked Style */
+    /* COMPACT SIDEBAR ROWS */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
         margin-bottom: -4px !important;
         padding-top: 0px !important;
@@ -88,17 +88,37 @@ with st.sidebar:
         st.rerun()
     st.header("Disponibilidad")
     st.write("---")
+    
     active_ids, pardon_ids = [], []
+    
+    # Header row - Fixed multi-line syntax
     h1, h2, h3, h4 = st.columns([1.5, 1.2, 1, 1])
-    with h1: st.write("**ID**"); with h2: st.write("**On**"); with h3: st.write("**🍴**"); with h4: st.write("**Exc.**")
+    with h1: 
+        st.write("**ID**")
+    with h2: 
+        st.write("**On**")
+    with h3: 
+        st.write("**🍴**")
+    with h4: 
+        st.write("**Exc.**")
+
+    # Surtidor rows - Fixed multi-line syntax
     for sid in ALL_IDS:
         c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
-        with c1: st.write(f"ID {sid}")
-        with c2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
-        with c3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
-        with c4: pdr = st.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
-        if on and not meal: active_ids.append(sid)
-        if pdr: pardon_ids.append(sid)
+        with c1: 
+            st.write(f"ID {sid}")
+        with c2: 
+            on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
+        with c3: 
+            meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
+        with c4: 
+            pdr = st.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
+        
+        if on and not meal: 
+            active_ids.append(sid)
+        if pdr: 
+            pardon_ids.append(sid)
+
     st.write("---")
     st.subheader("🔄 Próximos 20 Turnos")
     if st.session_state.scores and active_ids:
@@ -106,7 +126,10 @@ with st.sidebar:
         for _ in range(20):
             vr = {k: v for k, v in ts.items() if k in active_ids}
             if not vr: break
-            nid = min(vr, key=vr.get); turns.append(nid); counts[nid] = counts.get(nid, 0) + 1; ts[nid] += 1
+            nid = min(vr, key=vr.get)
+            turns.append(nid)
+            counts[nid] = counts.get(nid, 0) + 1
+            ts[nid] += 1
         st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
         summary_html = '<div class="summary-box"><b>Resumen (próx. 20):</b>'
         for sid, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
@@ -149,12 +172,9 @@ if st.session_state.pedidos:
     st.write("---")
     st.subheader("🔍 Filtros")
     f1, f2 = st.columns(2)
-    
-    # Dropdown Filter Logic
     with f1:
         cat_options = ["TODOS"] + sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
         sel_cat = st.selectbox("Seleccionar Categoría", cat_options)
-    
     with f2:
         prio_options = ["TODOS"] + sorted(list(set(p['P_Original'] for p in st.session_state.pedidos)))
         sel_prio = st.selectbox("Seleccionar Prioridad #", prio_options)
@@ -167,17 +187,19 @@ if st.session_state.pedidos:
         t_idx = min(sk, len(rot) - 1)
         aid = rot[t_idx][0]
         if aid == lid and len(rot) > 1 and t_idx == 0: aid = rot[1][0]
-        cs[aid] += 1; lid = aid
+        cs[aid] += 1
+        lid = aid
         
-        # Filter matching logic
         match_cat = (sel_cat == "TODOS" or p['Nombre'] == sel_cat)
         match_prio = (sel_prio == "TODOS" or p['P_Original'] == sel_prio)
         
         if match_cat and match_prio:
             chk, crd, nxt = st.columns([1, 14, 4])
-            with chk: done = st.checkbox("", key=f"d_{p['ID']}_{i}")
+            with chk: 
+                done = st.checkbox("", key=f"d_{p['ID']}_{i}")
             if not done:
-                with crd: st.markdown(f'<div class="assignment-card"><span class="id-badge">ID {aid}</span><span><b>{p["ID"]}</b> | {p["Nombre"]} | {p["Piezas"]} Pzs</span></div>', unsafe_allow_html=True)
+                with crd: 
+                    st.markdown(f'<div class="assignment-card"><span class="id-badge">ID {aid}</span><span><b>{p["ID"]}</b> | {p["Nombre"]} | {p["Piezas"]} Pzs</span></div>', unsafe_allow_html=True)
                 with nxt:
                     if st.button("SIGUIENTE", key=f"sk_{p['ID']}_{i}"):
                         st.session_state.skip_map[p['ID']] = sk + 1
