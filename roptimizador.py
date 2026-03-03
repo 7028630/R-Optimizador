@@ -60,22 +60,24 @@ st.markdown("""
         color: #FFFFFF !important; 
     }
     
-    /* Horizontal Row Spacing */
+    /* COMPACT VERTICAL SPACING (50% Closer) */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        margin-bottom: 2px !important;
-        padding-top: 2px !important;
+        margin-bottom: -4px !important;
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
     }
     
-    /* Force widgets in sidebar to be compact */
+    /* Ensure widgets don't add extra padding */
     [data-testid="stSidebar"] .stCheckbox, [data-testid="stSidebar"] .stToggle {
+        margin-top: 0px !important;
         margin-bottom: 0px !important;
     }
 
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 1px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
     
-    .summary-box { background-color: #212F3C; padding: 15px; border-radius: 10px; margin-top: 30px; border: 1px solid #34495E; color: #FFFFFF !important; }
-    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 6px 0; font-size: 1.1rem !important; }
+    .summary-box { background-color: #212F3C; padding: 12px; border-radius: 10px; margin-top: 20px; border: 1px solid #34495E; color: #FFFFFF !important; }
+    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 4px 0; font-size: 1rem !important; }
     
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
@@ -98,14 +100,14 @@ with st.sidebar:
     
     active_ids, pardon_ids = [], []
     
-    # Updated Header Columns
+    # Header row
     h1, h2, h3, h4 = st.columns([1.5, 1.2, 1, 1])
-    with h1: st.write("**Surtidor**")
+    with h1: st.write("**ID**")
     with h2: st.write("**On**")
     with h3: st.write("**🍴**")
     with h4: st.write("**Exc.**")
 
-    # Each surtidor is now strictly one row
+    # Horizontal row for each ID (Now closer together)
     for sid in ALL_IDS:
         c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
         with c1: st.write(f"ID {sid}")
@@ -131,7 +133,7 @@ with st.sidebar:
             summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} turnos</span></div>'
         st.markdown(summary_html + '</div>', unsafe_allow_html=True)
 
-# --- MAIN CONTENT (Same as before) ---
+# --- MAIN CONTENT ---
 st.title("📦 Panel de Control de Surtido")
 c1, c2, c3 = st.columns(3)
 with c1: h_in = st.text_area("1. Histórico", height=80)
