@@ -55,21 +55,23 @@ st.markdown("""
     .stApp { background-color: #EAECEE; color: #1C2833; }
     [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 420px !important; }
     
-    /* KILL TOP SPACE IN SIDEBAR */
+    /* SHIFT SIDEBAR CONTENT TO ABSOLUTE TOP */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        padding-top: 1rem !important;
+        padding-top: 0rem !important;
+        gap: 0rem !important;
     }
-    header[data-testid="stHeader"] {
-        background: rgba(0,0,0,0);
+    [data-testid="stSidebarNav"] {
+        display: none;
     }
     
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     
-    /* CLEAN VERTICAL SPACING (Not squeezed, not gapped) */
+    /* HALF-DISTANCE SPACING FOR SURTIDORES */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        margin-bottom: 4px !important;
-        padding-top: 2px !important;
+        margin-bottom: 2px !important;
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
     }
     
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 1px solid #ECF0F1 !important; }
@@ -91,22 +93,23 @@ if 'scores' not in st.session_state: st.session_state.scores = {}
 
 # --- SIDEBAR ---
 with st.sidebar:
-    # Top-level action
+    # Action button at the absolute top
     if st.button("🗑️ LIMPIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
     
-    st.subheader("Disponibilidad")
+    # Title moved up
+    st.markdown("### Disponibilidad")
     
     active_ids, pardon_ids = [], []
-    # Header row
+    # Columns for the horizontal row
     h1, h2, h3, h4 = st.columns([1.5, 1.2, 1, 1])
     with h1: st.write("**ID**")
     with h2: st.write("**On**")
     with h3: st.write("**🍴**")
     with h4: st.write("**Exc.**")
 
-    # Clean, single-row layout
+    # The Surtidor List - Half Distance Spacing
     for sid in ALL_IDS:
         c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
         with c1: st.write(f"ID {sid}")
@@ -118,7 +121,7 @@ with st.sidebar:
         if pdr: pardon_ids.append(sid)
 
     st.write("---")
-    st.subheader("🔄 Próximos 20")
+    st.markdown("#### 🔄 Próximos 20")
     if st.session_state.scores and active_ids:
         ts, turns, counts = st.session_state.scores.copy(), [], {}
         for _ in range(20):
