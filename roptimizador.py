@@ -54,12 +54,19 @@ st.markdown("""
     <style>
     .stApp { background-color: #EAECEE; color: #1C2833; }
     [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 420px !important; }
+    
+    /* REMOVE EMPTY SPACE AT TOP OF SIDEBAR */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        padding-top: 0px !important;
+        gap: 0px !important;
+    }
+    
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     
-    /* COMPACT SIDEBAR ROWS */
+    /* ULTRA COMPACT SIDEBAR ROWS (Half distance) */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        margin-bottom: -4px !important;
+        margin-bottom: -12px !important;
         padding-top: 0px !important;
         padding-bottom: 0px !important;
     }
@@ -67,7 +74,7 @@ st.markdown("""
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 1px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
     
-    .summary-box { background-color: #212F3C; padding: 12px; border-radius: 10px; margin-top: 20px; border: 1px solid #34495E; color: #FFFFFF !important; }
+    .summary-box { background-color: #212F3C; padding: 12px; border-radius: 10px; margin-top: 15px; border: 1px solid #34495E; color: #FFFFFF !important; }
     .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 4px 0; font-size: 1rem !important; }
     
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
@@ -83,44 +90,33 @@ if 'scores' not in st.session_state: st.session_state.scores = {}
 
 # --- SIDEBAR ---
 with st.sidebar:
+    # Shifted Limpiar button to the very top with no padding
     if st.button("🗑️ LIMPIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
+    
     st.header("Disponibilidad")
     st.write("---")
     
     active_ids, pardon_ids = [], []
-    
-    # Header row - Fixed multi-line syntax
     h1, h2, h3, h4 = st.columns([1.5, 1.2, 1, 1])
-    with h1: 
-        st.write("**ID**")
-    with h2: 
-        st.write("**On**")
-    with h3: 
-        st.write("**🍴**")
-    with h4: 
-        st.write("**Exc.**")
+    with h1: st.write("**ID**")
+    with h2: st.write("**On**")
+    with h3: st.write("**🍴**")
+    with h4: st.write("**Exc.**")
 
-    # Surtidor rows - Fixed multi-line syntax
     for sid in ALL_IDS:
         c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
-        with c1: 
-            st.write(f"ID {sid}")
-        with c2: 
-            on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
-        with c3: 
-            meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
-        with c4: 
-            pdr = st.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
+        with c1: st.write(f"ID {sid}")
+        with c2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
+        with c3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
+        with c4: pdr = st.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
         
-        if on and not meal: 
-            active_ids.append(sid)
-        if pdr: 
-            pardon_ids.append(sid)
+        if on and not meal: active_ids.append(sid)
+        if pdr: pardon_ids.append(sid)
 
     st.write("---")
-    st.subheader("🔄 Próximos 20 Turnos")
+    st.subheader("🔄 Próximos 20")
     if st.session_state.scores and active_ids:
         ts, turns, counts = st.session_state.scores.copy(), [], {}
         for _ in range(20):
@@ -137,15 +133,15 @@ with st.sidebar:
         st.markdown(summary_html + '</div>', unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
-st.title("📦 Panel de Control de Surtido")
+st.title("📦 Panel de Control")
 c1, c2, c3 = st.columns(3)
 with c1: h_in = st.text_area("1. Histórico", height=80)
-with c2: t_in = st.text_area("2. Totales de Hoy", height=80)
+with c2: t_in = st.text_area("2. Totales", height=80)
 with c3: o_in = st.text_area("3. Nuevos Pedidos", height=120)
 
 if st.button("💊 PROCESAR TURNOS"):
     parsed = parse_pending(o_in)
-    if not parsed: st.error("No se detectaron pedidos válidos.")
+    if not parsed: st.error("Sin pedidos válidos.")
     else:
         st.session_state.pedidos = parsed
         pat = r"(\d+)[A-Z\s\.]+(\d+)"
@@ -170,14 +166,11 @@ if st.button("💊 PROCESAR TURNOS"):
 
 if st.session_state.pedidos:
     st.write("---")
-    st.subheader("🔍 Filtros")
-    f1, f2 = st.columns(2)
-    with f1:
-        cat_options = ["TODOS"] + sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
-        sel_cat = st.selectbox("Seleccionar Categoría", cat_options)
-    with f2:
-        prio_options = ["TODOS"] + sorted(list(set(p['P_Original'] for p in st.session_state.pedidos)))
-        sel_prio = st.selectbox("Seleccionar Prioridad #", prio_options)
+    st.subheader("🔍 Filtro Único")
+    
+    # Combined into one dropdown for Category only
+    cat_options = ["TODOS"] + sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
+    sel_cat = st.selectbox("Categoría", cat_options)
 
     cs, lid = st.session_state.scores.copy(), None
     for i, p in enumerate(st.session_state.pedidos[:50]):
@@ -190,10 +183,7 @@ if st.session_state.pedidos:
         cs[aid] += 1
         lid = aid
         
-        match_cat = (sel_cat == "TODOS" or p['Nombre'] == sel_cat)
-        match_prio = (sel_prio == "TODOS" or p['P_Original'] == sel_prio)
-        
-        if match_cat and match_prio:
+        if sel_cat == "TODOS" or p['Nombre'] == sel_cat:
             chk, crd, nxt = st.columns([1, 14, 4])
             with chk: 
                 done = st.checkbox("", key=f"d_{p['ID']}_{i}")
