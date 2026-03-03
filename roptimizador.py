@@ -55,20 +55,21 @@ st.markdown("""
     .stApp { background-color: #EAECEE; color: #1C2833; }
     [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 420px !important; }
     
-    /* REMOVE EMPTY SPACE AT TOP OF SIDEBAR */
+    /* KILL TOP SPACE IN SIDEBAR */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        padding-top: 0px !important;
-        gap: 0px !important;
+        padding-top: 1rem !important;
+    }
+    header[data-testid="stHeader"] {
+        background: rgba(0,0,0,0);
     }
     
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     
-    /* ULTRA COMPACT SIDEBAR ROWS (Half distance) */
+    /* CLEAN VERTICAL SPACING (Not squeezed, not gapped) */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        margin-bottom: -12px !important;
-        padding-top: 0px !important;
-        padding-bottom: 0px !important;
+        margin-bottom: 4px !important;
+        padding-top: 2px !important;
     }
     
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 1px solid #ECF0F1 !important; }
@@ -90,21 +91,22 @@ if 'scores' not in st.session_state: st.session_state.scores = {}
 
 # --- SIDEBAR ---
 with st.sidebar:
-    # Shifted Limpiar button to the very top with no padding
+    # Top-level action
     if st.button("🗑️ LIMPIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
     
-    st.header("Disponibilidad")
-    st.write("---")
+    st.subheader("Disponibilidad")
     
     active_ids, pardon_ids = [], []
+    # Header row
     h1, h2, h3, h4 = st.columns([1.5, 1.2, 1, 1])
     with h1: st.write("**ID**")
     with h2: st.write("**On**")
     with h3: st.write("**🍴**")
     with h4: st.write("**Exc.**")
 
+    # Clean, single-row layout
     for sid in ALL_IDS:
         c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
         with c1: st.write(f"ID {sid}")
@@ -127,7 +129,7 @@ with st.sidebar:
             counts[nid] = counts.get(nid, 0) + 1
             ts[nid] += 1
         st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
-        summary_html = '<div class="summary-box"><b>Resumen (próx. 20):</b>'
+        summary_html = '<div class="summary-box">'
         for sid, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
             summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} turnos</span></div>'
         st.markdown(summary_html + '</div>', unsafe_allow_html=True)
@@ -141,7 +143,7 @@ with c3: o_in = st.text_area("3. Nuevos Pedidos", height=120)
 
 if st.button("💊 PROCESAR TURNOS"):
     parsed = parse_pending(o_in)
-    if not parsed: st.error("Sin pedidos válidos.")
+    if not parsed: st.error("Sin pedidos.")
     else:
         st.session_state.pedidos = parsed
         pat = r"(\d+)[A-Z\s\.]+(\d+)"
@@ -166,9 +168,7 @@ if st.button("💊 PROCESAR TURNOS"):
 
 if st.session_state.pedidos:
     st.write("---")
-    st.subheader("🔍 Filtro Único")
-    
-    # Combined into one dropdown for Category only
+    st.subheader("🔍 Filtro")
     cat_options = ["TODOS"] + sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
     sel_cat = st.selectbox("Categoría", cat_options)
 
@@ -185,11 +185,9 @@ if st.session_state.pedidos:
         
         if sel_cat == "TODOS" or p['Nombre'] == sel_cat:
             chk, crd, nxt = st.columns([1, 14, 4])
-            with chk: 
-                done = st.checkbox("", key=f"d_{p['ID']}_{i}")
+            with chk: done = st.checkbox("", key=f"d_{p['ID']}_{i}")
             if not done:
-                with crd: 
-                    st.markdown(f'<div class="assignment-card"><span class="id-badge">ID {aid}</span><span><b>{p["ID"]}</b> | {p["Nombre"]} | {p["Piezas"]} Pzs</span></div>', unsafe_allow_html=True)
+                with crd: st.markdown(f'<div class="assignment-card"><span class="id-badge">ID {aid}</span><span><b>{p["ID"]}</b> | {p["Nombre"]} | {p["Piezas"]} Pzs</span></div>', unsafe_allow_html=True)
                 with nxt:
                     if st.button("SIGUIENTE", key=f"sk_{p['ID']}_{i}"):
                         st.session_state.skip_map[p['ID']] = sk + 1
