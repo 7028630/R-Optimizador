@@ -3,7 +3,6 @@ import re
 from datetime import datetime
 
 # --- CONFIGURATION ---
-# Added 13 and 14 to the master list
 ALL_IDS = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
 PRIORITY_NAMES = {
@@ -45,13 +44,7 @@ def parse_pending(raw_text):
                 p_raw = int(nums[0])
                 items = int(nums[-1])
                 if p_raw in PRIORITY_NAMES:
-                    orders.append({
-                        "ID": oid, 
-                        "P_Original": p_raw,
-                        "P_Real": get_live_priority(p_raw), 
-                        "Piezas": items, 
-                        "Nombre": PRIORITY_NAMES.get(p_raw)
-                    })
+                    orders.append({"ID": oid, "P_Original": p_raw, "P_Real": get_live_priority(p_raw), "Piezas": items, "Nombre": PRIORITY_NAMES.get(p_raw)})
     return sorted(orders, key=lambda x: (x['P_Real'], -x['Piezas']))
 
 # --- UI STYLE ---
@@ -61,13 +54,35 @@ st.markdown("""
     <style>
     .stApp { background-color: #EAECEE; color: #1C2833; }
     [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 420px !important; }
+    
+    /* Global White Text */
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label { font-size: 1.15rem !important; font-weight: 500 !important; }
-    div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 2px solid #ECF0F1 !important; }
+    
+    /* TIGHT SPACING FOR SIDEBAR ROWS */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
+        margin-bottom: -22px !important;
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
+    }
+    
+    /* Adjust text size for the tighter rows */
+    [data-testid="stSidebar"] label p {
+        font-size: 1.05rem !important;
+        margin-bottom: 0px !important;
+    }
+
+    [data-testid="stSidebar"] svg { fill: #FFFFFF !important; width: 18px !important; height: 18px !important; }
+    
+    /* Toggle Colors */
+    div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 1px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
-    .summary-box { background-color: #212F3C; padding: 15px; border-radius: 10px; margin-top: 20px; border: 1px solid #34495E; color: #FFFFFF !important; }
-    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 6px 0; font-size: 1.1rem !important; }
+
+    /* Summary Box Styling */
+    .summary-box { background-color: #212F3C; padding: 12px; border-radius: 8px; margin-top: 40px; border: 1px solid #34495E; color: #FFFFFF !important; }
+    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 4px 0; font-size: 1rem !important; }
+    
+    /* Main Content Styling */
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
     div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 50px !important; padding: 10px 24px !important; font-weight: 900 !important; width: 100% !important; border: none !important; }
@@ -86,22 +101,21 @@ with st.sidebar:
         st.rerun()
     st.header("Disponibilidad")
     st.write("---")
-    h1, h2, h3 = st.columns([2,1,1])
-    with h1: st.write("**Surtidor**")
+    h1, h2, h3 = st.columns([2.5, 1, 1])
+    with h1: st.write("**ID**")
     with h2: st.write("**🍴**")
     with h3: st.write("**Exc.**")
     
-    active_ids = []
-    pardon_ids = []
+    active_ids, pardon_ids = [], []
     for i in ALL_IDS:
-        c_n, c_m, c_e = st.columns([2,1,1])
+        c_n, c_m, c_e = st.columns([2.5, 1, 1])
         with c_n: on = st.toggle(f"ID {i}", value=True, key=f"on_{i}")
         with c_m: meal = st.toggle("", key=f"m_{i}")
         with c_e: pdr = st.checkbox("", key=f"p_{i}")
         if on and not meal: active_ids.append(i)
         if pdr: pardon_ids.append(i)
     
-    st.write("---")
+    st.markdown("<br><br>", unsafe_allow_html=True) # Space before forecast
     st.subheader("🔄 Próximos 20 Turnos")
     if st.session_state.scores and active_ids:
         ts, turns, counts = st.session_state.scores.copy(), [], {}
@@ -151,16 +165,15 @@ if st.button("💊 PROCESAR TURNOS"):
 if st.session_state.pedidos:
     st.write("---")
     st.subheader("🔍 Filtros de Visualización")
-    f_col1, f_col2 = st.columns(2)
-    with f_col1:
-        all_names = sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
-        sel_names = st.multiselect("Filtrar por Categoría", all_names, default=all_names)
-    with f_col2:
-        all_prios = sorted(list(set(p['P_Original'] for p in st.session_state.pedidos)))
-        sel_prios = st.multiselect("Filtrar por Prioridad (#)", all_prios, default=all_prios)
+    f1, f2 = st.columns(2)
+    with f1:
+        names = sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
+        sel_n = st.multiselect("Categoría", names, default=names)
+    with f2:
+        prios = sorted(list(set(p['P_Original'] for p in st.session_state.pedidos)))
+        sel_p = st.multiselect("Prioridad #", prios, default=prios)
 
-    cs = st.session_state.scores.copy()
-    lid = None
+    cs, lid = st.session_state.scores.copy(), None
     for i, p in enumerate(st.session_state.pedidos[:50]):
         sk = st.session_state.skip_map.get(p['ID'], 0)
         rot = sorted(cs.items(), key=lambda x: x[1])
@@ -168,9 +181,8 @@ if st.session_state.pedidos:
         t_idx = min(sk, len(rot) - 1)
         aid = rot[t_idx][0]
         if aid == lid and len(rot) > 1 and t_idx == 0: aid = rot[1][0]
-        cs[aid] += 1
-        lid = aid
-        if p['Nombre'] in sel_names and p['P_Original'] in sel_prios:
+        cs[aid] += 1; lid = aid
+        if p['Nombre'] in sel_n and p['P_Original'] in sel_p:
             chk, crd, nxt = st.columns([1, 14, 4])
             with chk: done = st.checkbox("", key=f"d_{p['ID']}_{i}")
             if not done:
