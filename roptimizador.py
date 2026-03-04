@@ -59,7 +59,6 @@ st.markdown("""
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     
-    /* HALF-DISTANCE SPACING (2px) */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: 2px !important; padding-top: 0px !important; padding-bottom: 0px !important; }
     
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 1px solid #ECF0F1 !important; }
@@ -68,8 +67,9 @@ st.markdown("""
     .summary-box { background-color: #212F3C; padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px solid #34495E; color: #FFFFFF !important; }
     .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 3px 0; font-size: 0.9rem !important; }
     
-    .rank-container { background: #FFFFFF; padding: 10px; border-radius: 8px; border: 1px solid #D5DBDB; display: flex; gap: 10px; overflow-x: auto; align-items: center; }
-    .rank-item { background: #F4F6F7; padding: 4px 10px; border-radius: 4px; border-left: 4px solid #C0392B; white-space: nowrap; font-size: 0.85rem; font-weight: bold; color: #17202A; }
+    /* ULTRA MINIMAL RANKING */
+    .simple-rank { display: flex; gap: 12px; align-items: center; color: #566573; font-size: 1.1rem; padding-top: 10px; }
+    .rank-num { color: #17202A; font-weight: 500; border-bottom: 2px solid #C0392B; padding: 0 4px; }
     
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
@@ -104,7 +104,6 @@ with st.sidebar:
         if pdr: pardon_ids.append(sid)
     st.write("---")
     
-    # NEXT 20 SECTION + SUMMARY
     if st.session_state.scores and active_ids:
         st.markdown("#### 🔄 Próximos 20")
         ts, turns, counts = st.session_state.scores.copy(), [], {}
@@ -116,7 +115,6 @@ with st.sidebar:
         
         st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
         
-        # BROUGHT BACK: Summary of Next 20
         summary_html = '<div class="summary-box"><b>Turnos en este bloque:</b>'
         for sid, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
             summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} pedidos</span></div>'
@@ -129,9 +127,10 @@ with head1:
 with head2:
     if st.session_state.scores:
         sorted_rank = sorted(st.session_state.scores.items(), key=lambda x: x[1], reverse=True)
-        rank_html = '<div class="rank-container"><b>Rank Carga:</b>'
-        for i, (sid, score) in enumerate(sorted_rank):
-            rank_html += f'<div class="rank-item">#{i+1} ID {sid} ({score})</div>'
+        # Just the IDs, separated by spaces, underlined for emphasis
+        rank_html = '<div class="simple-rank"><span>Carga:</span>'
+        for sid, _ in sorted_rank:
+            rank_html += f'<span class="rank-num">{sid}</span>'
         rank_html += '</div>'
         st.markdown(rank_html, unsafe_allow_html=True)
 
