@@ -3,7 +3,8 @@ import re
 from datetime import datetime
 
 # --- CONFIGURATION ---
-ALL_IDS = [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+# Added ID 4 to the sequence
+ALL_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
 PRIORITY_NAMES = {
     1: "Local Urgente (1)", 2: "Local Urgente (2)",
@@ -60,14 +61,11 @@ st.markdown("""
         padding-top: 0rem !important;
         gap: 0rem !important;
     }
-    [data-testid="stSidebarNav"] {
-        display: none;
-    }
     
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     
-    /* HALF-DISTANCE SPACING FOR SURTIDORES */
+    /* HALF-DISTANCE SPACING FOR SURTIDORES (2px) */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
         margin-bottom: 2px !important;
         padding-top: 0px !important;
@@ -93,23 +91,20 @@ if 'scores' not in st.session_state: st.session_state.scores = {}
 
 # --- SIDEBAR ---
 with st.sidebar:
-    # Action button at the absolute top
     if st.button("🗑️ LIMPIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
     
-    # Title moved up
     st.markdown("### Disponibilidad")
     
     active_ids, pardon_ids = [], []
-    # Columns for the horizontal row
     h1, h2, h3, h4 = st.columns([1.5, 1.2, 1, 1])
     with h1: st.write("**ID**")
     with h2: st.write("**On**")
     with h3: st.write("**🍴**")
     with h4: st.write("**Exc.**")
 
-    # The Surtidor List - Half Distance Spacing
+    # The Surtidor List including ID 4
     for sid in ALL_IDS:
         c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
         with c1: st.write(f"ID {sid}")
