@@ -3,7 +3,6 @@ import re
 from datetime import datetime
 
 # --- CONFIGURATION ---
-# Added ID 4 to the sequence
 ALL_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
 PRIORITY_NAMES = {
@@ -56,27 +55,17 @@ st.markdown("""
     .stApp { background-color: #EAECEE; color: #1C2833; }
     [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 420px !important; }
     
-    /* SHIFT SIDEBAR CONTENT TO ABSOLUTE TOP */
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        padding-top: 0rem !important;
-        gap: 0rem !important;
-    }
-    
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0rem !important; gap: 0rem !important; }
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     
-    /* HALF-DISTANCE SPACING FOR SURTIDORES (2px) */
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        margin-bottom: 2px !important;
-        padding-top: 0px !important;
-        padding-bottom: 0px !important;
-    }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: 2px !important; padding-top: 0px !important; padding-bottom: 0px !important; }
     
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 1px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
     
-    .summary-box { background-color: #212F3C; padding: 12px; border-radius: 10px; margin-top: 15px; border: 1px solid #34495E; color: #FFFFFF !important; }
-    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 4px 0; font-size: 1rem !important; }
+    .rank-container { background: #FFFFFF; padding: 10px; border-radius: 8px; border: 1px solid #D5DBDB; display: flex; gap: 10px; overflow-x: auto; align-items: center; }
+    .rank-item { background: #F4F6F7; padding: 4px 10px; border-radius: 4px; border-left: 4px solid #C0392B; white-space: nowrap; font-size: 0.85rem; font-weight: bold; }
     
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
@@ -94,46 +83,48 @@ with st.sidebar:
     if st.button("🗑️ LIMPIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
-    
     st.markdown("### Disponibilidad")
-    
     active_ids, pardon_ids = [], []
     h1, h2, h3, h4 = st.columns([1.5, 1.2, 1, 1])
     with h1: st.write("**ID**")
     with h2: st.write("**On**")
     with h3: st.write("**🍴**")
     with h4: st.write("**Exc.**")
-
-    # The Surtidor List including ID 4
     for sid in ALL_IDS:
         c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
         with c1: st.write(f"ID {sid}")
         with c2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
         with c3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
         with c4: pdr = st.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
-        
         if on and not meal: active_ids.append(sid)
         if pdr: pardon_ids.append(sid)
-
     st.write("---")
-    st.markdown("#### 🔄 Próximos 20")
     if st.session_state.scores and active_ids:
+        st.markdown("#### 🔄 Próximos 20")
         ts, turns, counts = st.session_state.scores.copy(), [], {}
         for _ in range(20):
             vr = {k: v for k, v in ts.items() if k in active_ids}
             if not vr: break
             nid = min(vr, key=vr.get)
-            turns.append(nid)
-            counts[nid] = counts.get(nid, 0) + 1
-            ts[nid] += 1
+            turns.append(nid); counts[nid] = counts.get(nid, 0) + 1; ts[nid] += 1
         st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
-        summary_html = '<div class="summary-box">'
-        for sid, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
-            summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} turnos</span></div>'
-        st.markdown(summary_html + '</div>', unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
-st.title("📦 Panel de Control")
+# Header with Live Ranking next to Title
+head_col1, head_col2 = st.columns([1, 3])
+with head_col1:
+    st.title("📦 Panel")
+with head_col2:
+    if st.session_state.scores:
+        sorted_rank = sorted(st.session_state.scores.items(), key=lambda x: x[1], reverse=True)
+        rank_html = '<div class="rank-container"><b>Rank (Carga):</b>'
+        for i, (sid, score) in enumerate(sorted_rank):
+            rank_html += f'<div class="rank-item">#{i+1} ID {sid} ({score})</div>'
+        rank_html += '</div>'
+        st.markdown(rank_html, unsafe_allow_html=True)
+    else:
+        st.write("") # Spacer
+
 c1, c2, c3 = st.columns(3)
 with c1: h_in = st.text_area("1. Histórico", height=80)
 with c2: t_in = st.text_area("2. Totales", height=80)
@@ -166,9 +157,8 @@ if st.button("💊 PROCESAR TURNOS"):
 
 if st.session_state.pedidos:
     st.write("---")
-    st.subheader("🔍 Filtro")
     cat_options = ["TODOS"] + sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
-    sel_cat = st.selectbox("Categoría", cat_options)
+    sel_cat = st.selectbox("Filtrar Categoría", cat_options)
 
     cs, lid = st.session_state.scores.copy(), None
     for i, p in enumerate(st.session_state.pedidos[:50]):
@@ -178,8 +168,7 @@ if st.session_state.pedidos:
         t_idx = min(sk, len(rot) - 1)
         aid = rot[t_idx][0]
         if aid == lid and len(rot) > 1 and t_idx == 0: aid = rot[1][0]
-        cs[aid] += 1
-        lid = aid
+        cs[aid] += 1; lid = aid
         
         if sel_cat == "TODOS" or p['Nombre'] == sel_cat:
             chk, crd, nxt = st.columns([1, 14, 4])
