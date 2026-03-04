@@ -59,13 +59,17 @@ st.markdown("""
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     
+    /* HALF-DISTANCE SPACING (2px) */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div { margin-bottom: 2px !important; padding-top: 0px !important; padding-bottom: 0px !important; }
     
     div[data-testid="stWidgetLabel"] + div div[role="switch"] { background-color: #BDC3C7 !important; border: 1px solid #ECF0F1 !important; }
     div[data-testid="stWidgetLabel"] + div div[role="switch"][aria-checked="true"] { background-color: #E74C3C !important; }
     
+    .summary-box { background-color: #212F3C; padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px solid #34495E; color: #FFFFFF !important; }
+    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 3px 0; font-size: 0.9rem !important; }
+    
     .rank-container { background: #FFFFFF; padding: 10px; border-radius: 8px; border: 1px solid #D5DBDB; display: flex; gap: 10px; overflow-x: auto; align-items: center; }
-    .rank-item { background: #F4F6F7; padding: 4px 10px; border-radius: 4px; border-left: 4px solid #C0392B; white-space: nowrap; font-size: 0.85rem; font-weight: bold; }
+    .rank-item { background: #F4F6F7; padding: 4px 10px; border-radius: 4px; border-left: 4px solid #C0392B; white-space: nowrap; font-size: 0.85rem; font-weight: bold; color: #17202A; }
     
     .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
     .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
@@ -85,11 +89,11 @@ with st.sidebar:
         st.rerun()
     st.markdown("### Disponibilidad")
     active_ids, pardon_ids = [], []
-    h1, h2, h3, h4 = st.columns([1.5, 1.2, 1, 1])
-    with h1: st.write("**ID**")
-    with h2: st.write("**On**")
-    with h3: st.write("**🍴**")
-    with h4: st.write("**Exc.**")
+    h_col1, h_col2, h_col3, h_col4 = st.columns([1.5, 1.2, 1, 1])
+    with h_col1: st.write("**ID**")
+    with h_col2: st.write("**On**")
+    with h_col3: st.write("**🍴**")
+    with h_col4: st.write("**Exc.**")
     for sid in ALL_IDS:
         c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
         with c1: st.write(f"ID {sid}")
@@ -99,6 +103,8 @@ with st.sidebar:
         if on and not meal: active_ids.append(sid)
         if pdr: pardon_ids.append(sid)
     st.write("---")
+    
+    # NEXT 20 SECTION + SUMMARY
     if st.session_state.scores and active_ids:
         st.markdown("#### 🔄 Próximos 20")
         ts, turns, counts = st.session_state.scores.copy(), [], {}
@@ -107,23 +113,27 @@ with st.sidebar:
             if not vr: break
             nid = min(vr, key=vr.get)
             turns.append(nid); counts[nid] = counts.get(nid, 0) + 1; ts[nid] += 1
+        
         st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
+        
+        # BROUGHT BACK: Summary of Next 20
+        summary_html = '<div class="summary-box"><b>Turnos en este bloque:</b>'
+        for sid, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
+            summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} pedidos</span></div>'
+        st.markdown(summary_html + '</div>', unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
-# Header with Live Ranking next to Title
-head_col1, head_col2 = st.columns([1, 3])
-with head_col1:
+head1, head2 = st.columns([1, 4])
+with head1:
     st.title("📦 Panel")
-with head_col2:
+with head2:
     if st.session_state.scores:
         sorted_rank = sorted(st.session_state.scores.items(), key=lambda x: x[1], reverse=True)
-        rank_html = '<div class="rank-container"><b>Rank (Carga):</b>'
+        rank_html = '<div class="rank-container"><b>Rank Carga:</b>'
         for i, (sid, score) in enumerate(sorted_rank):
             rank_html += f'<div class="rank-item">#{i+1} ID {sid} ({score})</div>'
         rank_html += '</div>'
         st.markdown(rank_html, unsafe_allow_html=True)
-    else:
-        st.write("") # Spacer
 
 c1, c2, c3 = st.columns(3)
 with c1: h_in = st.text_area("1. Histórico", height=80)
