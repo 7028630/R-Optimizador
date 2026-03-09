@@ -5,194 +5,136 @@ from datetime import datetime
 # --- CONFIGURATION ---
 ALL_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 
-PRIORITY_NAMES = {
-    1: "Local Urgente (1)", 2: "Local Urgente (2)",
-    3: "Apodaca", 4: "Guadalupe", 5: "Santa Catarina",
-    6: "Solidaridad", 7: "Unidad", 8: "Sur Foráneo", 9: "Sur",
-    10: "Foráneo Urgente", 11: "Foráneo", 12: "Torreón",
-    14: "Saltillo", 16: "Local Desp. Corte",
-    17: "Foráneo Urg. Desp. Corte", 18: "Foráneo Desp. Corte", 19: "Torreón Desp. Corte"
-}
-
-def get_live_priority(p_val):
-    now = datetime.now().time()
-    d1245 = datetime.strptime("12:45", "%H:%M").time()
-    d1500 = datetime.strptime("15:00", "%H:%M").time()
-    d1600 = datetime.strptime("16:00", "%H:%M").time()
-    if p_val in [14, 8, 1, 2]: return p_val
-    if (3 <= p_val <= 7 or p_val == 9) and now >= d1245: return 16
-    if (p_val == 10 or p_val == 11) and now >= d1500: return 18
-    if p_val == 12 and now >= d1600: return 19
-    if 3 <= p_val <= 9: return 3
-    return p_val
-
-def parse_pending(raw_text):
-    if not raw_text: return []
-    lines = raw_text.strip().split('\n')
-    orders = []
-    for line in lines:
-        line = line.strip()
-        if not line or "#N/A" in line or "CANCELADO" in line: continue
-        parts = [p for p in re.split(r'\t|\s{2,}', line) if p.strip()]
-        if len(parts) > 5: continue
-        match_id = re.search(r"(64\d{4})", line)
-        if match_id:
-            oid = match_id.group(1)
-            remaining = line.replace(oid, "", 1).strip()
-            nums = re.findall(r'\d+', remaining)
-            if len(nums) >= 2:
-                p_raw = int(nums[0])
-                items = int(nums[-1])
-                if p_raw in PRIORITY_NAMES:
-                    orders.append({"ID": oid, "P_Original": p_raw, "P_Real": get_live_priority(p_raw), "Piezas": items, "Nombre": PRIORITY_NAMES.get(p_raw)})
-    return sorted(orders, key=lambda x: (x['P_Real'], -x['Piezas']))
-
 # --- UI STYLE ---
-st.set_page_config(page_title="Surtido Pro", layout="wide")
+st.set_page_config(page_title="Productividad Surtido", layout="wide")
 
 st.markdown("""
     <style>
     .stApp { background-color: #EAECEE; color: #1C2833; }
     [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 420px !important; }
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { padding-top: 0rem !important; gap: 0rem !important; }
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
-    .summary-box { background-color: #212F3C; padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px solid #34495E; color: #FFFFFF !important; }
-    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 3px 0; font-size: 0.9rem !important; }
-    .simple-rank { display: flex; gap: 12px; align-items: center; color: #566573; font-size: 1.1rem; padding-top: 10px; }
-    .rank-num { color: #17202A; font-weight: 500; border-bottom: 2px solid #C0392B; padding: 0 4px; }
-    .id-badge { background-color: #17202A; color: #FFFFFF !important; padding: 8px 16px; border-radius: 4px; font-weight: 900; font-size: 1.3em; margin-right: 20px; border: 1px solid #566573; }
-    .assignment-card { background: #FFFFFF; padding: 15px; border-left: 12px solid #C0392B; border-radius: 4px; margin-bottom: 8px; border-bottom: 2px solid #AEB6BF; color: #17202A; display: flex; align-items: center; }
-    div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 50px !important; padding: 10px 24px !important; font-weight: 900 !important; width: 100% !important; border: none !important; }
-    .turn-pill { background: #E74C3C; color: white; padding: 4px 10px; border-radius: 8px; margin: 3px; display: inline-block; font-size: 0.85rem; border: 1px solid #566573; font-weight: bold; }
+    
+    /* TABLE STYLING */
+    .rank-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .rank-table th { background-color: #C0392B; color: white; padding: 12px; text-align: left; }
+    .rank-table td { padding: 10px; border-bottom: 1px solid #D5DBDB; color: #1C2833; }
+    .rank-table tr:nth-child(even) { background-color: #F4F6F7; }
+    .rank-table tr:hover { background-color: #FBFCFC; }
+    
+    .leader-row { background-color: #FDEDEC !important; font-weight: bold; border-left: 5px solid #C0392B; }
+    .id-pill { background: #17202A; color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+    
+    div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 8px !important; font-weight: 900 !important; width: 100% !important; }
     </style>
 """, unsafe_allow_html=True)
 
-if 'skip_map' not in st.session_state: st.session_state.skip_map = {}
-if 'pedidos' not in st.session_state: st.session_state.pedidos = []
-if 'scores' not in st.session_state: st.session_state.scores = {}
+if 'final_ranking' not in st.session_state: st.session_state.final_ranking = []
 
 # --- SIDEBAR ---
 with st.sidebar:
-    if st.button("🗑️ LIMPIAR TODO"): 
-        for k in list(st.session_state.keys()): del st.session_state[k]
+    st.markdown("### ⚙️ Configuración")
+    if st.button("🗑️ REINICIAR DATOS"): 
+        st.session_state.final_ranking = []
         st.rerun()
-    st.markdown("### Disponibilidad")
-    active_ids, pardon_ids = [], []
-    h_col1, h_col2, h_col3, h_col4 = st.columns([1.5, 1.2, 1, 1])
-    with h_col1: st.write("**ID**")
-    with h_col2: st.write("**On**")
-    with h_col3: st.write("**🍴**")
-    with h_col4: st.write("**Exc.**")
-    for sid in ALL_IDS:
-        c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
-        with c1: st.write(f"ID {sid}")
-        with c2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
-        with c3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
-        with c4: pdr = st.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
-        if on and not meal: active_ids.append(sid)
-        if pdr: pardon_ids.append(sid)
     st.write("---")
-    
-    if st.session_state.scores and active_ids:
-        st.markdown("#### 🔄 Próximos 20")
-        ts, turns, counts = st.session_state.scores.copy(), [], {}
-        for _ in range(20):
-            vr = {k: v for k, v in ts.items() if k in active_ids}
-            if not vr: break
-            nid = min(vr, key=vr.get)
-            turns.append(nid); counts[nid] = counts.get(nid, 0) + 1; ts[nid] += 1
-        st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
-        summary_html = '<div class="summary-box"><b>Turnos en este bloque:</b>'
-        for sid, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
-            summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} pedidos</span></div>'
-        st.markdown(summary_html + '</div>', unsafe_allow_html=True)
+    st.info("Esta herramienta consolida los pedidos del mes con los realizados el día de hoy para generar el ranking final.")
 
 # --- MAIN CONTENT ---
-head1, head2 = st.columns([1, 4])
-with head1:
-    st.title("📦 Panel")
-with head2:
-    if st.session_state.scores:
-        sorted_rank = sorted(st.session_state.scores.items(), key=lambda x: x[1], reverse=True)
-        rank_html = '<div class="simple-rank"><span>Carga:</span>'
-        for sid, _ in sorted_rank:
-            rank_html += f'<span class="rank-num">{sid}</span>'
-        rank_html += '</div>'
-        st.markdown(rank_html, unsafe_allow_html=True)
+st.title("🏆 Ranking de Productividad Acumulada")
 
-c1, c2, c3 = st.columns(3)
-with c1: h_in = st.text_area("1. Histórico", height=80, placeholder="Pega ranking histórico aquí...")
-with c2: t_in = st.text_area("2. Totales", height=80, placeholder="Pega totales del día aquí...")
-with c3: o_in = st.text_area("3. Nuevos Pedidos", height=120, placeholder="Pega lista de folios...")
+c1, c2 = st.columns(2)
+with c1:
+    h_in = st.text_area("1. Cuadros de productividad del mes", height=200, 
+                        placeholder="Pega aquí el cuadro de productividad de cada día del mes hasta ahora...")
+with c2:
+    t_in = st.text_area("2. Totales del día (Actual)", height=200, 
+                        placeholder="Pega aquí los totales que van en el turno de hoy...")
 
-if st.button("💊 PROCESAR TURNOS"):
-    parsed = parse_pending(o_in)
-    if not parsed: 
-        st.error("Sin pedidos.")
-    else:
-        st.session_state.pedidos = parsed
-        # Regex adjusted for "No. Name Count" format
-        pat = r"(\d+)\s+[A-Z\s\.\-_]+\s+(\d+)"
-        
-        h_blocks = []
-        if h_in.strip():
-            # Separate by blocks if multiple are pasted
-            raw_blocks = re.split(r'Total\s+\d+|No\.', h_in)
-            for block in raw_blocks:
-                m = re.findall(pat, block)
-                if m: h_blocks.append({int(k): int(v) for k, v in m})
-        
-        t_counts = {int(k): int(v) for k, v in re.findall(pat, t_in) if int(k) in active_ids}
-        
-        scores = {}
-        # Get baseline for new or excused people
-        temp_sums = [sum(b.values()) for b in h_blocks if b]
-        avg_per_block = sum(temp_sums) / len(temp_sums) if temp_sums else 0
-        baseline = int(avg_per_block / len(ALL_IDS)) if avg_per_block > 0 else 0
-        
-        max_seen = 0
-        for idx in active_ids:
-            h_sum = sum(b.get(idx, 0) for b in h_blocks)
-            # If they haven't been active in the last 2 blocks, they are "reset" to baseline
-            is_recent = any(b.get(idx, 0) > 0 for b in h_blocks[-2:]) if len(h_blocks) >= 2 else True
-            
-            current_t = t_counts.get(idx, 0)
-            if idx in pardon_ids or not is_recent:
-                scores[idx] = baseline + current_t
-            else:
-                scores[idx] = h_sum + current_t
-            
-            if scores[idx] > max_seen: max_seen = scores[idx]
+if st.button("📊 GENERAR RANKING CONSOLIDADO"):
+    # Regex for: ID - Name - Count (Supports M.SANCHEZ 72 or K. IBARRA 22)
+    pat = r"(\d+)\s+([A-Z\s\.\-_]+?)\s+(\d+)"
+    
+    names_map = {}
+    historical_data = {}
+    
+    # Process Historico
+    if h_in.strip():
+        matches = re.findall(pat, h_in)
+        for sid_raw, name, count in matches:
+            sid = int(sid_raw)
+            historical_data[sid] = historical_data.get(sid, 0) + int(count)
+            names_map[sid] = name.strip()
 
-        for idx in scores:
-            if scores[idx] == 0 and idx not in pardon_ids:
-                scores[idx] = max_seen + 5
+    # Process Totales del Día
+    today_data = {}
+    if t_in.strip():
+        matches_today = re.findall(pat, t_in)
+        for sid_raw, name, count in matches_today:
+            sid = int(sid_raw)
+            today_data[sid] = int(count)
+            if sid not in names_map: names_map[sid] = name.strip()
 
-        st.session_state.scores = scores
-        st.rerun()
+    # Consolidate
+    combined = []
+    all_active_sids = set(list(historical_data.keys()) + list(today_data.keys()))
+    
+    for sid in all_active_sids:
+        h_val = historical_data.get(sid, 0)
+        t_val = today_data.get(sid, 0)
+        combined.append({
+            "ID": sid,
+            "Nombre": names_map.get(sid, f"ID {sid}"),
+            "Historico": h_val,
+            "Hoy": t_val,
+            "Total": h_val + t_val
+        })
+    
+    # Sort by Total Descending
+    st.session_state.final_ranking = sorted(combined, key=lambda x: x['Total'], reverse=True)
+    st.rerun()
 
-if st.session_state.pedidos:
+# --- DISPLAY RANKING ---
+if st.session_state.final_ranking:
     st.write("---")
-    cat_options = ["TODOS"] + sorted(list(set(p['Nombre'] for p in st.session_state.pedidos)))
-    sel_cat = st.selectbox("Filtrar Categoría", cat_options)
-
-    cs, lid = st.session_state.scores.copy(), None
-    for i, p in enumerate(st.session_state.pedidos[:50]):
-        sk = st.session_state.skip_map.get(p['ID'], 0)
-        rot = sorted(cs.items(), key=lambda x: x[1])
-        if not rot: break
-        t_idx = min(sk, len(rot) - 1)
-        aid = rot[t_idx][0]
-        if aid == lid and len(rot) > 1 and t_idx == 0: aid = rot[1][0]
-        
-        if sel_cat == "TODOS" or p['Nombre'] == sel_cat:
-            cs[aid] += 1; lid = aid # Only count if displayed
-            chk, crd, nxt = st.columns([1, 14, 4])
-            with chk: done = st.checkbox("", key=f"d_{p['ID']}_{i}")
-            if not done:
-                with crd: st.markdown(f'<div class="assignment-card"><span class="id-badge">ID {aid}</span><span><b>{p["ID"]}</b> | {p["Nombre"]} | {p["Piezas"]} Pzs</span></div>', unsafe_allow_html=True)
-                with nxt:
-                    if st.button("SIGUIENTE", key=f"sk_{p['ID']}_{i}"):
-                        st.session_state.skip_map[p['ID']] = sk + 1
-                        st.rerun()
+    st.subheader("Resultados Consolidados")
+    
+    table_html = """
+    <table class="rank-table">
+        <thead>
+            <tr>
+                <th>Puesto</th>
+                <th>ID</th>
+                <th>Surtidor</th>
+                <th>Histórico (Mes)</th>
+                <th>Hoy</th>
+                <th>Total Acumulado</th>
+            </tr>
+        </thead>
+        <tbody>
+    """
+    
+    for i, row in enumerate(st.session_state.final_ranking):
+        rank_class = "leader-row" if i == 0 else ""
+        table_html += f"""
+            <tr class="{rank_class}">
+                <td>#{i+1}</td>
+                <td><span class="id-pill">{row['ID']}</span></td>
+                <td>{row['Nombre']}</td>
+                <td>{row['Historico']}</td>
+                <td>{row['Hoy']}</td>
+                <td>{row['Total']}</td>
+            </tr>
+        """
+    
+    table_html += "</tbody></table>"
+    st.markdown(table_html, unsafe_allow_html=True)
+    
+    # Quick Summary Metrics
+    m1, m2, m3 = st.columns(3)
+    top_performer = st.session_state.final_ranking[0]
+    m1.metric("Líder General", top_performer['Nombre'], f"{top_performer['Total']} Pedidos")
+    m2.metric("Total Pedidos Mes", sum(r['Historico'] for r in st.session_state.final_ranking))
+    m3.metric("Total Pedidos Hoy", sum(r['Hoy'] for r in st.session_state.final_ranking))
+else:
+    st.info("Esperando datos para procesar el ranking...")
