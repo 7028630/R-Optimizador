@@ -16,7 +16,7 @@ st.markdown("""
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
     
     /* TABLE STYLING */
-    .rank-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .rank-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
     .rank-table th { background-color: #C0392B; color: white; padding: 12px; text-align: left; }
     .rank-table td { padding: 10px; border-bottom: 1px solid #D5DBDB; color: #1C2833; }
     .rank-table tr:nth-child(even) { background-color: #F4F6F7; }
@@ -52,7 +52,6 @@ with st.sidebar:
         with c3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
         with c4: pdr = st.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
         
-        # Solo se consideran para el ranking si están On y no están comiendo
         if on and not meal:
             active_ids.append(sid)
 
@@ -61,18 +60,17 @@ st.title("🏆 Ranking Mensual Consolidado")
 
 c1, c2 = st.columns(2)
 with c1:
-    h_in = st.text_area("1. Productividad del mes hasta ahora", height=150, 
-                        placeholder="Pega aquí el cuadro de productividad de cada día del mes...")
+    h_in = st.text_area("1. Cuadro de productividad de cada día del mes", height=150, 
+                        placeholder="Pega aquí los datos acumulados del mes...")
 with c2:
     t_in = st.text_area("2. Totales del día actual", height=150, 
-                        placeholder="Pega aquí los totales que van hoy...")
+                        placeholder="Pega aquí los totales de hoy...")
 
 if st.button("📊 ACTUALIZAR RANKING"):
     pat = r"(\d+)\s+([A-Z\s\.\-_]+?)\s+(\d+)"
     names_map = {}
     historical_data = {}
     
-    # Procesar histórico
     if h_in.strip():
         matches = re.findall(pat, h_in)
         for sid_raw, name, count in matches:
@@ -80,7 +78,6 @@ if st.button("📊 ACTUALIZAR RANKING"):
             historical_data[sid] = historical_data.get(sid, 0) + int(count)
             names_map[sid] = name.strip()
 
-    # Procesar hoy
     today_data = {}
     if t_in.strip():
         matches_today = re.findall(pat, t_in)
@@ -89,7 +86,6 @@ if st.button("📊 ACTUALIZAR RANKING"):
             today_data[sid] = int(count)
             if sid not in names_map: names_map[sid] = name.strip()
 
-    # Consolidar solo para los IDs activos seleccionados en la barra lateral
     combined = []
     for sid in active_ids:
         h_val = historical_data.get(sid, 0)
@@ -108,7 +104,9 @@ if st.button("📊 ACTUALIZAR RANKING"):
 # --- DISPLAY ---
 if st.session_state.final_ranking:
     st.write("---")
-    table_html = """
+    
+    # Construcción robusta del HTML
+    table_header = """
     <table class="rank-table">
         <thead>
             <tr>
@@ -123,9 +121,10 @@ if st.session_state.final_ranking:
         <tbody>
     """
     
+    rows_html = ""
     for i, row in enumerate(st.session_state.final_ranking):
         rank_class = "leader-row" if i == 0 else ""
-        table_html += f"""
+        rows_html += f"""
             <tr class="{rank_class}">
                 <td>#{i+1}</td>
                 <td><span class="id-pill">{row['ID']}</span></td>
@@ -135,7 +134,10 @@ if st.session_state.final_ranking:
                 <td>{row['Total']}</td>
             </tr>
         """
-    table_html += "</tbody></table>"
-    st.markdown(table_html, unsafe_allow_html=True)
+    
+    full_table = table_header + rows_html + "</tbody></table>"
+    
+    # Renderizado final
+    st.markdown(full_table, unsafe_allow_html=True)
 else:
-    st.info("Configura la disponibilidad y pega los datos para ver el ranking de los surtidores activos.")
+    st.info("Configura la disponibilidad y actualiza para ver la tabla.")
