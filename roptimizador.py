@@ -1,6 +1,6 @@
 import streamlit as st
 import re
-from datetime import datetime
+import pandas as pd
 
 # --- CONFIGURATION ---
 ALL_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
@@ -14,16 +14,6 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #17202A !important; min-width: 420px !important; }
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { color: #FFFFFF !important; }
-    
-    /* TABLE STYLING */
-    .rank-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    .rank-table th { background-color: #C0392B; color: white; padding: 12px; text-align: left; }
-    .rank-table td { padding: 10px; border-bottom: 1px solid #D5DBDB; color: #1C2833; }
-    .rank-table tr:nth-child(even) { background-color: #F4F6F7; }
-    
-    .leader-row { background-color: #FDEDEC !important; font-weight: bold; border-left: 5px solid #C0392B; }
-    .id-pill { background: #17202A; color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
-    
     div.stButton > button { background-color: #C0392B !important; color: white !important; border-radius: 8px !important; font-weight: 900 !important; width: 100% !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -67,6 +57,7 @@ with c2:
                         placeholder="Pega aquí los totales de hoy...")
 
 if st.button("📊 ACTUALIZAR RANKING"):
+    # Updated regex to be more forgiving with names and spaces
     pat = r"(\d+)\s+([A-Z\s\.\-_]+?)\s+(\d+)"
     names_map = {}
     historical_data = {}
@@ -92,8 +83,8 @@ if st.button("📊 ACTUALIZAR RANKING"):
         t_val = today_data.get(sid, 0)
         combined.append({
             "ID": sid,
-            "Nombre": names_map.get(sid, f"ID {sid}"),
-            "Historico": h_val,
+            "Surtidor": names_map.get(sid, f"ID {sid}"),
+            "Histórico": h_val,
             "Hoy": t_val,
             "Total": h_val + t_val
         })
@@ -105,39 +96,31 @@ if st.button("📊 ACTUALIZAR RANKING"):
 if st.session_state.final_ranking:
     st.write("---")
     
-    # Construcción robusta del HTML
-    table_header = """
-    <table class="rank-table">
-        <thead>
-            <tr>
-                <th>Puesto</th>
-                <th>ID</th>
-                <th>Surtidor</th>
-                <th>Histórico</th>
-                <th>Hoy</th>
-                <th>Total Acumulado</th>
-            </tr>
-        </thead>
-        <tbody>
-    """
+    # Create a DataFrame for reliable display
+    df = pd.DataFrame(st.session_state.final_ranking)
     
-    rows_html = ""
-    for i, row in enumerate(st.session_state.final_ranking):
-        rank_class = "leader-row" if i == 0 else ""
-        rows_html += f"""
-            <tr class="{rank_class}">
-                <td>#{i+1}</td>
-                <td><span class="id-pill">{row['ID']}</span></td>
-                <td>{row['Nombre']}</td>
-                <td>{row['Historico']}</td>
-                <td>{row['Hoy']}</td>
-                <td>{row['Total']}</td>
-            </tr>
-        """
+    # Add Rank column at the start
+    df.index = range(1, len(df) + 1)
+    df.index.name = "Puesto"
     
-    full_table = table_header + rows_html + "</tbody></table>"
+    # Format IDs to remove decimals if they appear
+    df['ID'] = df['ID'].astype(str)
+
+    # Use st.dataframe for an interactive, bug-free table
+    st.dataframe(
+        df, 
+        use_container_width=True,
+        column_config={
+            "Total": st.column_config.NumberColumn(format="%d 📦"),
+            "Histórico": st.column_config.NumberColumn(format="%d"),
+            "Hoy": st.column_config.NumberColumn(format="%d"),
+        }
+    )
     
-    # Renderizado final
-    st.markdown(full_table, unsafe_allow_html=True)
+    # Highlight the winner visually with a Big Number
+    top_name = st.session_state.final_ranking[0]['Surtidor']
+    top_score = st.session_state.final_ranking[0]['Total']
+    st.success(f"🥇 **Líder Actual:** {top_name} con **{top_score}** pedidos acumulados.")
+
 else:
-    st.info("Configura la disponibilidad y actualiza para ver la tabla.")
+    st.info("Configura la disponibilidad y pulsa el botón para generar el ranking.")
