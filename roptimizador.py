@@ -20,7 +20,6 @@ st.markdown("""
     .rank-table th { background-color: #C0392B; color: white; padding: 12px; text-align: left; }
     .rank-table td { padding: 10px; border-bottom: 1px solid #D5DBDB; color: #1C2833; }
     .rank-table tr:nth-child(even) { background-color: #F4F6F7; }
-    .rank-table tr:hover { background-color: #FBFCFC; }
     
     .leader-row { background-color: #FDEDEC !important; font-weight: bold; border-left: 5px solid #C0392B; }
     .id-pill { background: #17202A; color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
@@ -31,34 +30,49 @@ st.markdown("""
 
 if 'final_ranking' not in st.session_state: st.session_state.final_ranking = []
 
-# --- SIDEBAR ---
+# --- SIDEBAR: DISPONIBILIDAD ---
 with st.sidebar:
-    st.markdown("### ⚙️ Configuración")
-    if st.button("🗑️ REINICIAR DATOS"): 
-        st.session_state.final_ranking = []
+    st.markdown("### ⚙️ Disponibilidad")
+    if st.button("🗑️ REINICIAR TODO"): 
+        for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
+    
     st.write("---")
-    st.info("Esta herramienta consolida los pedidos del mes con los realizados el día de hoy para generar el ranking final.")
+    active_ids = []
+    h_col1, h_col2, h_col3, h_col4 = st.columns([1.5, 1.2, 1, 1])
+    with h_col1: st.write("**ID**")
+    with h_col2: st.write("**On**")
+    with h_col3: st.write("**🍴**")
+    with h_col4: st.write("**Exc.**")
+    
+    for sid in ALL_IDS:
+        c1, c2, c3, c4 = st.columns([1.5, 1.2, 1, 1])
+        with c1: st.write(f"ID {sid}")
+        with c2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
+        with c3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
+        with c4: pdr = st.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
+        
+        # Solo se consideran para el ranking si están On y no están comiendo
+        if on and not meal:
+            active_ids.append(sid)
 
 # --- MAIN CONTENT ---
-st.title("🏆 Ranking de Productividad Acumulada")
+st.title("🏆 Ranking Mensual Consolidado")
 
 c1, c2 = st.columns(2)
 with c1:
-    h_in = st.text_area("1. Cuadros de productividad del mes", height=200, 
-                        placeholder="Pega aquí el cuadro de productividad de cada día del mes hasta ahora...")
+    h_in = st.text_area("1. Productividad del mes hasta ahora", height=150, 
+                        placeholder="Pega aquí el cuadro de productividad de cada día del mes...")
 with c2:
-    t_in = st.text_area("2. Totales del día (Actual)", height=200, 
-                        placeholder="Pega aquí los totales que van en el turno de hoy...")
+    t_in = st.text_area("2. Totales del día actual", height=150, 
+                        placeholder="Pega aquí los totales que van hoy...")
 
-if st.button("📊 GENERAR RANKING CONSOLIDADO"):
-    # Regex for: ID - Name - Count (Supports M.SANCHEZ 72 or K. IBARRA 22)
+if st.button("📊 ACTUALIZAR RANKING"):
     pat = r"(\d+)\s+([A-Z\s\.\-_]+?)\s+(\d+)"
-    
     names_map = {}
     historical_data = {}
     
-    # Process Historico
+    # Procesar histórico
     if h_in.strip():
         matches = re.findall(pat, h_in)
         for sid_raw, name, count in matches:
@@ -66,7 +80,7 @@ if st.button("📊 GENERAR RANKING CONSOLIDADO"):
             historical_data[sid] = historical_data.get(sid, 0) + int(count)
             names_map[sid] = name.strip()
 
-    # Process Totales del Día
+    # Procesar hoy
     today_data = {}
     if t_in.strip():
         matches_today = re.findall(pat, t_in)
@@ -75,11 +89,9 @@ if st.button("📊 GENERAR RANKING CONSOLIDADO"):
             today_data[sid] = int(count)
             if sid not in names_map: names_map[sid] = name.strip()
 
-    # Consolidate
+    # Consolidar solo para los IDs activos seleccionados en la barra lateral
     combined = []
-    all_active_sids = set(list(historical_data.keys()) + list(today_data.keys()))
-    
-    for sid in all_active_sids:
+    for sid in active_ids:
         h_val = historical_data.get(sid, 0)
         t_val = today_data.get(sid, 0)
         combined.append({
@@ -90,15 +102,12 @@ if st.button("📊 GENERAR RANKING CONSOLIDADO"):
             "Total": h_val + t_val
         })
     
-    # Sort by Total Descending
     st.session_state.final_ranking = sorted(combined, key=lambda x: x['Total'], reverse=True)
     st.rerun()
 
-# --- DISPLAY RANKING ---
+# --- DISPLAY ---
 if st.session_state.final_ranking:
     st.write("---")
-    st.subheader("Resultados Consolidados")
-    
     table_html = """
     <table class="rank-table">
         <thead>
@@ -106,7 +115,7 @@ if st.session_state.final_ranking:
                 <th>Puesto</th>
                 <th>ID</th>
                 <th>Surtidor</th>
-                <th>Histórico (Mes)</th>
+                <th>Histórico</th>
                 <th>Hoy</th>
                 <th>Total Acumulado</th>
             </tr>
@@ -126,15 +135,7 @@ if st.session_state.final_ranking:
                 <td>{row['Total']}</td>
             </tr>
         """
-    
     table_html += "</tbody></table>"
     st.markdown(table_html, unsafe_allow_html=True)
-    
-    # Quick Summary Metrics
-    m1, m2, m3 = st.columns(3)
-    top_performer = st.session_state.final_ranking[0]
-    m1.metric("Líder General", top_performer['Nombre'], f"{top_performer['Total']} Pedidos")
-    m2.metric("Total Pedidos Mes", sum(r['Historico'] for r in st.session_state.final_ranking))
-    m3.metric("Total Pedidos Hoy", sum(r['Hoy'] for r in st.session_state.final_ranking))
 else:
-    st.info("Esperando datos para procesar el ranking...")
+    st.info("Configura la disponibilidad y pega los datos para ver el ranking de los surtidores activos.")
