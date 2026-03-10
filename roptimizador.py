@@ -25,7 +25,7 @@ st.markdown("""
         min-width: 320px !important; 
     }
 
-    /* HIDE GHOST TEXT (keyboard_double) */
+    /* HIDE GHOST TEXT (◕⁠ᴗ⁠◕⁠✿⁠) */
     [data-testid="stSidebarNav"] + div, 
     button[title="Collapse sidebar"], 
     [data-testid="collapsedControl"] {
