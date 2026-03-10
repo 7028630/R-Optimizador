@@ -2,41 +2,62 @@ import re
 import pandas as pd
 
 def parse_surtidor_data(raw_text):
-    # 1. Pattern for 'collapsed' text (Today's data style)
-    # Finds: [ID] [Name/Support] [Orders] [Pieces/Dashes]
-    collapsed_pattern = r'(\d+)([A-Z\.\s]+(?:[A-Z]+)*)(\d+)([\d\.\-]+)'
+    """
+    Unified parser for structured and collapsed "Surtidor" data.
+    Works even if the data is squashed together.
+    """
+    # Pattern Logic:
+    # (\d+)            -> Group 1: The ID (1-2 digits)
+    # ([A-Z\.\s/]+)    -> Group 2: The Name (Letters, dots, spaces, slashes)
+    # (\d+)            -> Group 3: Pedidos (The first number after the name)
+    # ([\d\.\-]+)      -> Group 4: Piezas (Numbers with decimals or a dash)
+    pattern = r'(\d{1,2})([A-Z\.\s/]{3,25}?)(\d+)([\d\.\-]+)'
     
-    # 2. Pattern for 'structured' text (Historical style)
-    structured_pattern = r'(\d+)\t+([A-Z\.\s]+)\t+(\d+)\t+([\d\.\-]+)'
-
-    results = []
+    # Pre-cleaning: Remove headers and footer noise to prevent false matches
+    clean_text = re.sub(r'No\.|SURTIDOR|PEDIDOS|PIEZAS|Total.*|SIN NOMBRE', '', raw_text, flags=re.IGNORECASE)
     
-    # Clean the text: Remove "Total" lines and headers to avoid noise
-    clean_text = re.sub(r'No\.|SURTIDOR|PEDIDOS|PIEZAS|Total.*', '', raw_text)
-
-    # Try matching structured first, then collapsed
-    for line in clean_text.split('\n'):
-        line = line.strip()
-        if not line: continue
+    matches = re.findall(pattern, clean_text)
+    
+    data = []
+    for m in matches:
+        idx, name, pedidos, piezas = m
         
-        # Check structured (tabs)
-        match = re.search(structured_pattern, line)
-        if not match:
-            # Check collapsed (no spaces)
-            match = re.search(collapsed_pattern, line)
-            
-        if match:
-            results.append({
-                "ID": match.group(1),
-                "Surtidor": match.group(2).strip(),
-                "Pedidos": int(match.group(3)),
-                "Piezas": match.group(4).replace('-', '0').replace(' ', '')
-            })
+        # Clean up the name from trailing/leading whitespace
+        name = name.strip()
+        
+        # Convert piezas: replace dash with 0, remove extra dots if it's a thousands separator
+        piezas_clean = piezas.replace('-', '0').strip()
+        
+        data.append({
+            "No.": int(idx),
+            "Surtidor": name,
+            "Pedidos": int(pedidos),
+            "Piezas": piezas_clean
+        })
 
-    return pd.DataFrame(results)
+    df = pd.DataFrame(data)
+    
+    # If the same ID appears multiple times (History + Today), we group them
+    if not df.empty:
+        summary = df.groupby(['No.', 'Surtidor']).agg({
+            'Pedidos': 'sum',
+            'Piezas': lambda x: "Combined Records" # Or sum if you convert to float
+        }).reset_index()
+        return df, summary
+    
+    return df, None
 
-# DATA INPUT
-raw_input = """[PASTE EVERYTHING HERE]"""
+# --- HOW TO USE ---
+# Replace the triple quotes content with your actual paste
+raw_input = """
+[PASTE YOUR ENTIRE HISTORIAL AND TODAY'S DATA HERE]
+"""
 
-df = parse_surtidor_data(raw_input)
-print(df.to_string(index=False))
+all_records, total_summary = parse_surtidor_data(raw_input)
+
+# Output results
+print("--- DETAILED RECORDS EXTRACTED ---")
+print(all_records.to_string(index=False))
+
+# Optional: Export to CSV for Excel
+# all_records.to_csv("surtidor_report.csv", index=False)
