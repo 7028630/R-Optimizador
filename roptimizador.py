@@ -145,13 +145,15 @@ with c2:
     t_in = st.text_area("2. Datos Live (Hoy)", height=150)
 
 if st.button("📊 ACTUALIZAR DASHBOARD"):
-    # Regex captures the ID, ignores the name, and captures the numbers
     pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
     data_p, data_i = {}, {}
 
+    # 🛠️ FIXED: Treat dots as thousands separators, not decimals
     def clean_val(v):
         if not v or '-' in str(v): return 0
-        return int(float(str(v).replace(',', '')))
+        # Remove commas AND dots to get the pure whole number
+        s = str(v).replace(',', '').replace('.', '')
+        return int(s)
 
     for raw_text in [h_in, t_in]:
         if raw_text.strip():
