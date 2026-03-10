@@ -4,13 +4,12 @@ import pandas as pd
 import plotly.express as px
 
 # --- CONFIGURATION ---
-ALL_IDS = list(range(1, 22)) # Expanded to cover all possible IDs in your list
+ALL_IDS = list(range(1, 22)) 
 KNOWN_FIXES = {
-    6: "LIDERES DE OPERACIONES",
-    7: "C. GARCIA",
-    12: "R. GONZALEZ",
-    13: "J. PEREZ",
-    14: "J. SILVA",
+    1: "M. SANCHEZ", 2: "K. IBARRA", 3: "C. RODRIGUEZ", 4: "O. DAVILA",
+    5: "H. CRUZ", 6: "D. CASTILLO", 7: "C. GARCIA", 8: "C. SILVA",
+    9: "M. HERNANDEZ", 10: "H. BARBOZA", 11: "J. RENTERIA", 
+    12: "R. GONZALEZ", 13: "J. PEREZ", 14: "J. SILVA",
     18: "LIDERES DE OPERACIONES"
 }
 
@@ -19,26 +18,67 @@ st.set_page_config(page_title="Productividad Surtido", layout="wide")
 
 st.markdown("""
     <style>
+    /* Global Background & Font */
     html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3, span, label, th, td {
         font-family: Arial, Helvetica, sans-serif !important;
         color: #FFFFFF !important;
     }
     .stApp { background-color: #17202A; }
     header, [data-testid="stHeader"] { background-color: #17202A !important; }
-    [data-testid="stSidebar"] { background-color: #111821 !important; min-width: 320px !important; }
+    
+    /* SIDEBAR STYLE */
+    [data-testid="stSidebar"] { 
+        background-color: #111821 !important; 
+        min-width: 320px !important; 
+    }
+    
+    /* Tables */
     table { color: #FFFFFF !important; width: 100%; border-collapse: collapse; }
-    thead tr th { color: #FFFFFF !important; background-color: #212F3C !important; border-bottom: 2px solid #C0392B !important; text-align: left; padding: 8px; }
-    tbody tr td { color: #FFFFFF !important; border-bottom: 1px solid #2C3E50 !important; padding: 8px; }
+    thead tr th { color: #FFFFFF !important; background-color: #212F3C !important; border-bottom: 2px solid #C0392B !important; }
+    tbody tr td { color: #FFFFFF !important; border-bottom: 1px solid #2C3E50 !important; }
+
+    /* UI CLEANUP */
     [data-testid="stSidebarNav"] + div, button[title="Collapse sidebar"] > span { display: none !important; }
-    div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; }
-    .turn-pill { background: #C0392B; padding: 2px 8px; border-radius: 10px; margin: 2px; display: inline-block; font-size: 0.8rem; font-weight: bold; }
+    
+    /* TURNS UI */
+    .turn-pill { 
+        background: #C0392B; 
+        color: white !important;
+        padding: 2px 8px; 
+        border-radius: 10px; 
+        margin: 2px; 
+        display: inline-block; 
+        font-size: 0.8rem; 
+        font-weight: bold; 
+    }
+    .summary-box { 
+        background-color: #212F3C; 
+        padding: 10px; 
+        border-radius: 8px; 
+        border-left: 4px solid #C0392B; 
+        margin-top: 10px;
+    }
+    .summary-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        border-bottom: 1px solid #2C3E50;
+        padding: 2px 0;
+    }
+    
+    /* Buttons */
+    div.stButton > button { 
+        background-color: #C0392B !important; 
+        color: #FFFFFF !important; 
+        font-weight: bold !important; 
+    }
     </style>
 """, unsafe_allow_html=True)
 
 if 'final_ranking' not in st.session_state: st.session_state.final_ranking = []
 if 'scores' not in st.session_state: st.session_state.scores = {}
 
-# --- SIDEBAR: DISPONIBILIDAD ---
+# --- SIDEBAR: DISPONIBILIDAD & TURNS ---
 with st.sidebar:
     st.markdown("## ⚙️ Disponibilidad")
     if st.button("🗑️ REINICIAR TODO"): 
@@ -47,34 +87,67 @@ with st.sidebar:
     
     active_ids = []
     st.write("---")
+    
+    # Selection area
     for sid in ALL_IDS:
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1: st.markdown(f"**ID {sid}**")
         with col2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
         with col3: meal = st.toggle("🍴", key=f"m_{sid}", label_visibility="collapsed")
-        if on and not meal: active_ids.append(sid)
+        if on and not meal: 
+            active_ids.append(sid)
+
+    # --- NEXT 20 TURNS LOGIC ---
+    if st.session_state.scores and active_ids:
+        st.write("---")
+        st.markdown("### 🔄 Siguientes 20 Turnos")
+        
+        # Simulate turns
+        temp_scores = st.session_state.scores.copy()
+        simulated_turns = []
+        turn_counts = {}
+
+        for _ in range(20):
+            # Only consider people currently toggled "On" and not "Eating"
+            valid_candidates = {k: v for k, v in temp_scores.items() if k in active_ids}
+            if not valid_candidates: break
+            
+            # The person with the lowest current order count gets the next turn
+            next_person = min(valid_candidates, key=valid_candidates.get)
+            simulated_turns.append(next_person)
+            turn_counts[next_person] = turn_counts.get(next_person, 0) + 1
+            temp_scores[next_person] += 1
+        
+        # Visual display of sequence
+        st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in simulated_turns]), unsafe_allow_html=True)
+        
+        # Visual display of total counts per person
+        summary_html = '<div class="summary-box"><b>Distribución:</b><br>'
+        # Sort summary by count descending
+        sorted_counts = sorted(turn_counts.items(), key=lambda x: x[1], reverse=True)
+        for sid, count in sorted_counts:
+            name = KNOWN_FIXES.get(sid, f"ID {sid}")
+            summary_html += f'<div class="summary-row"><span>{name}</span> <span>+{count} ped</span></div>'
+        summary_html += '</div>'
+        st.markdown(summary_html, unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
 st.title("🏆 Dashboard de Productividad")
 
 c1, c2 = st.columns(2)
 with c1:
-    h_in = st.text_area("1. Histórico Acumulado", height=150, placeholder="Pega el historial aquí...")
+    h_in = st.text_area("1. Histórico Acumulado", height=150)
 with c2:
-    t_in = st.text_area("2. Live Data (Hoy)", height=150, placeholder="Pega los datos de hoy aquí...")
+    t_in = st.text_area("2. Datos Live (Hoy)", height=150)
 
-if st.button("📊 PROCESAR Y ACTUALIZAR"):
-    # Improved Regex: Handles IDs, Names (or lack thereof), and Numbers with decimals/commas
-    # Group 1: ID, Group 2: Name (optional), Group 3: Pedidos, Group 4: Piezas
+if st.button("📊 ACTUALIZAR DASHBOARD"):
     pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
-    
     data_p, data_i, names_map = {}, {}, {}
 
     def clean_val(v):
         if not v or '-' in str(v): return 0
         return int(float(str(v).replace(',', '')))
 
-    # Process History and Today
     for raw_text in [h_in, t_in]:
         if raw_text.strip():
             matches = re.findall(pat, raw_text)
@@ -83,34 +156,33 @@ if st.button("📊 PROCESAR Y ACTUALIZAR"):
                 data_p[sid] = data_p.get(sid, 0) + clean_val(ped)
                 data_i[sid] = data_i.get(sid, 0) + clean_val(pza)
                 
-                # Logic to determine the name
                 raw_n = str(name_raw).strip().upper() if name_raw else ""
                 if sid in KNOWN_FIXES and (not raw_n or "0" in raw_n or "-" in raw_n):
                     names_map[sid] = KNOWN_FIXES[sid]
                 elif raw_n and not raw_n.isdigit():
                     names_map[sid] = raw_n
-                elif sid not in names_map:
+                else:
                     names_map[sid] = KNOWN_FIXES.get(sid, f"ID {sid}")
 
     combined = []
     for sid, peds in data_p.items():
-        if peds > 0 or data_i.get(sid, 0) > 0:
-            combined.append({
-                "ID": sid,
-                "Surtidor": names_map.get(sid, f"ID {sid}"),
-                "Pedidos": peds,
-                "Piezas": data_i.get(sid, 0)
-            })
+        combined.append({
+            "ID": sid,
+            "Surtidor": names_map.get(sid, f"ID {sid}"),
+            "Pedidos": peds,
+            "Piezas": data_i.get(sid, 0)
+        })
     
     st.session_state.final_ranking = sorted(combined, key=lambda x: x['Pedidos'], reverse=True)
+    # Store the actual current counts for turn logic
     st.session_state.scores = {sid: data_p.get(sid, 0) for sid in ALL_IDS}
     st.rerun()
 
-# --- VISUALIZATION ---
+# --- VISUALS ---
 if st.session_state.final_ranking:
     st.write("---")
     df = pd.DataFrame(st.session_state.final_ranking)
-    df.index = range(1, len(df) + 1) # Start Rank at 1
+    df.index = range(1, len(df) + 1)
 
     col_chart, col_table = st.columns([1.3, 0.7])
 
@@ -120,7 +192,7 @@ if st.session_state.final_ranking:
                      color_discrete_sequence=px.colors.sequential.Reds_r)
         fig.update_traces(textinfo='percent+label', textfont_size=14, marker=dict(line=dict(color='#17202A', width=2)))
         fig.update_layout(
-            height=850, # EXTRA LARGE PIE CHART
+            height=850,
             showlegend=False,
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
@@ -129,12 +201,10 @@ if st.session_state.final_ranking:
         st.plotly_chart(fig, use_container_width=True)
 
     with col_table:
-        st.markdown("### 🏅 Ranking de Surtido")
+        st.markdown("### 🏅 Ranking")
         st.table(df[["Surtidor", "Pedidos", "Piezas"]])
         
-        st.markdown("### ⚡ Rendimiento Promedio")
+        st.markdown("### ⚡ Eficiencia")
         df_eff = df.copy()
         df_eff['P/Hr'] = (df_eff['Pedidos'] / 8).round(1)
         st.table(df_eff[['Surtidor', 'P/Hr']])
-else:
-    st.info("💡 Pega los datos arriba y presiona el botón para visualizar el ranking.")
