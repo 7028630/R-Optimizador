@@ -77,6 +77,16 @@ st.markdown("""
         color: #FFFFFF !important; 
         font-weight: bold !important; 
     }
+
+    /* Stats Box */
+    .stats-container {
+        background-color: #212F3C;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #C0392B;
+        text-align: center;
+        margin-top: -20px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -125,7 +135,6 @@ with st.sidebar:
             turn_counts[next_person] = turn_counts.get(next_person, 0) + 1
             temp_scores[next_person] += 1
         
-        # Display sequence as Surtidor numbers
         st.markdown("".join([f'<span class="turn-pill">S{t}</span>' for t in simulated_turns]), unsafe_allow_html=True)
         
         summary_html = '<div class="summary-box"><b>Distribución:</b><br>'
@@ -148,10 +157,8 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
     data_p, data_i = {}, {}
 
-    # 🛠️ FIXED: Treat dots as thousands separators, not decimals
     def clean_val(v):
         if not v or '-' in str(v): return 0
-        # Remove commas AND dots to get the pure whole number
         s = str(v).replace(',', '').replace('.', '')
         return int(s)
 
@@ -197,6 +204,17 @@ if st.session_state.final_ranking:
             margin=dict(t=10, b=10, l=10, r=10)
         )
         st.plotly_chart(fig, use_container_width=True)
+
+        # 📉 NEW: Standard Deviation Section
+        stdev_val = df['Pedidos'].std()
+        avg_val = df['Pedidos'].mean()
+        st.markdown(f"""
+            <div class="stats-container">
+                <span style="font-size: 0.9rem; color: #BDC3C7;">Balance de Carga (Pedidos)</span><br>
+                <span style="font-size: 1.8rem; font-weight: bold; color: #FFFFFF;">σ {stdev_val:.2f}</span><br>
+                <span style="font-size: 0.8rem; color: #E74C3C;">Promedio: {avg_val:.1f}</span>
+            </div>
+        """, unsafe_allow_html=True)
 
     with col_table:
         st.markdown("### 🏅 Ranking (IDs)")
