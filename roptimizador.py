@@ -9,12 +9,16 @@ ALL_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
 # --- UI STYLE ---
 st.set_page_config(page_title="Productividad Surtido", layout="wide")
 
-# CSS for Arial font and general styling
 st.markdown("""
     <style>
-    /* Global Font Overrides */
-    html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p {
+    /* Global Font Arial */
+    html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3 {
         font-family: Arial, Helvetica, sans-serif !important;
+    }
+
+    /* Hide the 'keyboard_double_arrow' ghost text and extra sidebar icons */
+    [data-testid="stSidebarNav"] + div, button[title="Collapse sidebar"] > span {
+        display: none !important;
     }
     
     .stApp { background-color: #EAECEE; color: #1C2833; }
@@ -24,11 +28,15 @@ st.markdown("""
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span { 
         color: #FFFFFF !important; 
-        font-family: Arial !important;
+    }
+    
+    /* Spacing for Availability Toggles */
+    .stCheckbox, .stToggleButton {
+        margin-bottom: 15px !important;
     }
     
     .summary-box { background-color: #212F3C; padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px solid #34495E; color: #FFFFFF !important; }
-    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 3px 0; font-size: 0.9rem !important; }
+    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 5px 0; font-size: 0.95rem !important; }
     .turn-pill { background: #E74C3C; color: white; padding: 4px 10px; border-radius: 8px; margin: 3px; display: inline-block; font-size: 0.85rem; border: 1px solid #566573; font-weight: bold; }
     
     div.stButton > button { 
@@ -37,7 +45,6 @@ st.markdown("""
         border-radius: 8px !important; 
         font-weight: 900 !important; 
         width: 100% !important; 
-        font-family: Arial !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -47,13 +54,14 @@ if 'scores' not in st.session_state: st.session_state.scores = {}
 
 # --- SIDEBAR: DISPONIBILIDAD & PRÓXIMOS 20 ---
 with st.sidebar:
-    st.markdown("### ⚙️ Disponibilidad")
+    st.markdown("## ⚙️ Disponibilidad")
     if st.button("🗑️ REINICIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
     
     st.write("---")
     active_ids = []
+    # Encabezados con más espacio
     h_col1, h_col2, h_col3, h_col4 = st.columns([1.5, 1.2, 1, 1])
     with h_col1: st.write("**ID**")
     with h_col2: st.write("**On**")
@@ -70,7 +78,7 @@ with st.sidebar:
 
     if st.session_state.scores and active_ids:
         st.write("---")
-        st.markdown("#### 🔄 Proyección: Siguientes 20")
+        st.markdown("### 🔄 Proyección: Siguientes 20")
         ts = st.session_state.scores.copy()
         turns, counts = [], {}
         for _ in range(20):
@@ -78,27 +86,31 @@ with st.sidebar:
             if not valid_scores: break
             next_id = min(valid_scores, key=valid_scores.get)
             turns.append(next_id); counts[next_id] = counts.get(next_id, 0) + 1; ts[next_id] += 1
+        
         st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
+        
         summary_html = '<div class="summary-box"><b>Turnos a asignar:</b>'
         for sid, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
             summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} pedidos</span></div>'
         st.markdown(summary_html + '</div>', unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
-st.title("🏆 Dashboard de Productividad (Arial)")
+st.title("🏆 Dashboard de Productividad")
 
 c1, c2 = st.columns(2)
 with c1:
-    h_in = st.text_area("1. Productividad del mes", height=120, placeholder="Pega datos del mes...")
+    h_in = st.text_area("1. Pega aquí el cuadro de productividad de cada día del mes hasta ahora", height=150)
 with c2:
-    t_in = st.text_area("2. Totales de hoy", height=120, placeholder="Pega datos de hoy...")
+    t_in = st.text_area("2. Totales del día actual", height=150)
 
-if st.button("📊 PROCESAR DATOS Y MÉTRICAS"):
-    # Updated Regex: Handles "4 O. DAVILA 136" or "1 M.SANCHEZ 205"
-    pat = r"(\d+)\s+([A-Z\s\.\-_]+?)\s+(\d+)(?:\s+(\d+))?"
+if st.button("📊 ACTUALIZAR DASHBOARD"):
+    # REVISIÓN DE REGEX: Permite números, espacios, puntos y letras (Ej: "4 O. DAVILA 136")
+    # Captura: (ID) (Nombre con puntos/espacios) (Pedidos) (Piezas opcional)
+    pat = r"(\d+)\s+([A-Za-z\s\.\-_]+?)\s+(\d+)(?:\s+(\d+))?"
     
     names_map, historical_data, historical_items = {}, {}, {}
     
+    # Procesar Mes
     if h_in.strip():
         for sid_raw, name, count, items in re.findall(pat, h_in):
             sid = int(sid_raw)
@@ -106,6 +118,7 @@ if st.button("📊 PROCESAR DATOS Y MÉTRICAS"):
             historical_items[sid] = historical_items.get(sid, 0) + (int(items) if items and items.isdigit() else 0)
             names_map[sid] = name.strip()
 
+    # Procesar Hoy
     today_data, today_items = {}, {}
     if t_in.strip():
         for sid_raw, name, count, items in re.findall(pat, t_in):
@@ -120,10 +133,11 @@ if st.button("📊 PROCESAR DATOS Y MÉTRICAS"):
         h_itm, t_itm = historical_items.get(sid, 0), today_items.get(sid, 0)
         total_p, total_i = h_val + t_val, h_itm + t_itm
         current_scores[sid] = total_p
+        
         if sid in active_ids or total_p > 0:
             combined.append({
                 "ID": sid, 
-                "Surtidor": names_map.get(sid, f"ID {sid}"),
+                "Surtidor": names_map.get(sid, f"Surtidor {sid}").upper(),
                 "Histórico": h_val, 
                 "Hoy": t_val, 
                 "Total Pedidos": total_p, 
@@ -138,56 +152,35 @@ if st.button("📊 PROCESAR DATOS Y MÉTRICAS"):
 if st.session_state.final_ranking:
     st.write("---")
     df = pd.DataFrame(st.session_state.final_ranking)
-    
-    # Start Index at 1 for Ranking
     df.index = range(1, len(df) + 1)
     df.index.name = "Puesto"
 
-    st.subheader("📋 Tabla de Posiciones")
+    st.subheader("📋 Tabla de Posiciones (Ordenada por Total)")
     st.dataframe(df.style.format({
-        "Histórico": "{:,.0f}",
-        "Hoy": "{:,.0f}",
-        "Total Pedidos": "{:,.0f}",
-        "Total Piezas": "{:,.0f}"
+        "Histórico": "{:,.0f}", "Hoy": "{:,.0f}", 
+        "Total Pedidos": "{:,.0f}", "Total Piezas": "{:,.0f}"
     }), use_container_width=True)
 
-    col_chart, col_efficiency = st.columns([1.2, 0.8])
+    col_chart, col_efficiency = st.columns([1.3, 0.7])
 
     with col_chart:
-        st.subheader("📈 Participación Mensual (ID + %)")
-        # Create a display label combining ID and Name
+        st.subheader("📈 Participación en Volumen")
         df['Label'] = "ID " + df['ID'].astype(str) + " - " + df['Surtidor']
+        fig = px.pie(df, values='Total Pedidos', names='Label', hole=.3,
+                     color_discrete_sequence=px.colors.sequential.Reds_r)
         
-        fig = px.pie(
-            df, 
-            values='Total Pedidos', 
-            names='Label', 
-            hole=.3,
-            color_discrete_sequence=px.colors.sequential.Reds_r
-        )
-        
-        # Make the chart bigger and format labels to show percentage + ID inside slices
-        fig.update_traces(
-            textinfo='percent+label',
-            textfont_size=14,
-            marker=dict(line=dict(color='#000000', width=1))
-        )
-        fig.update_layout(
-            height=600, 
-            margin=dict(t=30, b=30, l=10, r=10),
-            font_family="Arial",
-            showlegend=True
-        )
+        fig.update_traces(textinfo='percent+label', textfont_size=13)
+        fig.update_layout(height=650, font_family="Arial", showlegend=True,
+                          margin=dict(t=20, b=20, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
 
     with col_efficiency:
-        st.subheader("⚡ Eficiencia (8h)")
+        st.subheader("⚡ Eficiencia (Promedio 8h)")
         df_eff = df.copy()
-        df_eff['Pedidos/Hr'] = (df_eff['Total Pedidos'] / 8).round(2)
-        df_eff['Piezas/Hr'] = (df_eff['Total Piezas'] / 8).round(2)
-        
-        st.table(df_eff[['Surtidor', 'Pedidos/Hr', 'Piezas/Hr']])
-        st.caption("Cálculo basado en jornada de 8h.")
+        df_eff['Ped/Hr'] = (df_eff['Total Pedidos'] / 8).round(2)
+        df_eff['Pza/Hr'] = (df_eff['Total Piezas'] / 8).round(2)
+        st.table(df_eff[['Surtidor', 'Ped/Hr', 'Pza/Hr']])
+        st.caption("Basado en jornada diaria de 8 horas.")
 
 else:
-    st.info("Pega los datos del mes y de hoy para generar el dashboard.")
+    st.info("Configura la disponibilidad y pega los datos para generar el dashboard.")
