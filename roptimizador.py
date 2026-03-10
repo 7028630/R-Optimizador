@@ -85,8 +85,8 @@ if 'scores' not in st.session_state: st.session_state.scores = {}
 
 # --- SIDEBAR: DISPONIBILIDAD & TURNS ---
 with st.sidebar:
-    st.markdown("## 🍴 Disponibilidad")
-    if st.button("🗑️ REINICIAR TODO"): 
+    st.markdown("## ✅Asistencia/Comida🍱")
+    if st.button("🔄 REINICIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
     
@@ -111,7 +111,7 @@ with st.sidebar:
     # --- NEXT 20 TURNS LOGIC ---
     if st.session_state.scores and active_ids:
         st.write("---")
-        st.markdown("### 🔄 Siguientes 20 Turnos")
+        st.markdown("### ⏭️ Siguientes 20 Turnos")
         
         temp_scores = st.session_state.scores.copy()
         simulated_turns = []
@@ -136,7 +136,7 @@ with st.sidebar:
         st.markdown(summary_html, unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
-st.title("📦💊 Dashboard de Productividad 💊📦")
+st.title("📦💊 Panel de Productividad 💊📦")
 
 c1, c2 = st.columns(2)
 with c1:
@@ -144,7 +144,7 @@ with c1:
 with c2:
     t_in = st.text_area("2. Datos Live (Hoy)", height=150)
 
-if st.button("📊 ACTUALIZAR DASHBOARD"):
+if st.button(" ✳️ ACTUALIZAR PANEL"):
     pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
     data_p, data_i = {}, {}
 
