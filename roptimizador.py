@@ -136,7 +136,7 @@ with st.sidebar:
         st.markdown(summary_html, unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
-st.title("🏆 Dashboard de Productividad Anónimo")
+st.title("📦💊 Dashboard de Productividad 💊📦")
 
 c1, c2 = st.columns(2)
 with c1:
