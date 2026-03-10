@@ -85,7 +85,7 @@ if 'scores' not in st.session_state: st.session_state.scores = {}
 
 # --- SIDEBAR: DISPONIBILIDAD & TURNS ---
 with st.sidebar:
-    st.markdown("## ⚙️ Disponibilidad")
+    st.markdown("## 🍴 Disponibilidad")
     if st.button("🗑️ REINICIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
