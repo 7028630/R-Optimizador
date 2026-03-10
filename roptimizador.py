@@ -11,50 +11,80 @@ st.set_page_config(page_title="Productividad Surtido", layout="wide")
 
 st.markdown("""
     <style>
-    /* Fuente Arial Global */
-    html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3 {
+    /* Global Font Arial & Force White Text */
+    html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3, span, label {
         font-family: Arial, Helvetica, sans-serif !important;
+        color: #FFFFFF !important;
     }
 
-    /* Ocultar iconos de colapso y textos basura del sidebar */
-    [data-testid="stSidebarNav"] + div, button[title="Collapse sidebar"] > span {
-        display: none !important;
-    }
+    /* Backgrounds */
+    .stApp { background-color: #1C2833; } /* Fondo un poco más oscuro para que resalte el blanco */
     
-    .stApp { background-color: #EAECEE; color: #1C2833; }
-    
-    /* SIDEBAR COMPACTO */
+    /* SIDEBAR COMPACTO Y TEXTO BLANCO */
     [data-testid="stSidebar"] { 
         background-color: #17202A !important; 
         min-width: 350px !important; 
     }
     
-    /* Ajuste de espaciado entre filas en el sidebar */
-    [data-testid="stVerticalBlock"] > div {
-        gap: 0.1rem !important;
+    /* Ocultar iconos basura */
+    [data-testid="stSidebarNav"] + div, button[title="Collapse sidebar"] > span {
+        display: none !important;
     }
     
-    /* Reducción de espacio en las columnas de disponibilidad */
+    /* Ajuste de espaciado Sidebar */
+    [data-testid="stVerticalBlock"] > div {
+        gap: 0.05rem !important;
+    }
+    
     [data-testid="column"] {
-        padding: 0px 5px !important;
+        padding: 0px 2px !important;
     }
 
-    /* Ajuste específico para que los toggles no floten lejos del ID */
     .stCheckbox, .stToggleButton, .stMarkdown p {
         margin-bottom: 0px !important;
-        padding-bottom: 2px !important;
+        padding-bottom: 0px !important;
     }
 
-    .summary-box { background-color: #212F3C; padding: 10px; border-radius: 8px; margin-top: 5px; border: 1px solid #34495E; color: #FFFFFF !important; }
-    .summary-row { display: flex; justify-content: space-between; border-bottom: 1px solid #2C3E50; padding: 2px 0; font-size: 0.85rem !important; }
-    .turn-pill { background: #E74C3C; color: white; padding: 2px 8px; border-radius: 6px; margin: 2px; display: inline-block; font-size: 0.8rem; border: 1px solid #566573; font-weight: bold; }
+    /* Boxes de Proyección */
+    .summary-box { 
+        background-color: #212F3C; 
+        padding: 8px; 
+        border-radius: 8px; 
+        margin-top: 5px; 
+        border: 1px solid #C0392B; 
+    }
+    .summary-row { 
+        display: flex; 
+        justify-content: space-between; 
+        border-bottom: 1px solid #2C3E50; 
+        padding: 2px 0; 
+        font-size: 0.85rem !important; 
+    }
+    .turn-pill { 
+        background: #C0392B; 
+        color: white !important; 
+        padding: 2px 8px; 
+        border-radius: 6px; 
+        margin: 2px; 
+        display: inline-block; 
+        font-size: 0.8rem; 
+        font-weight: bold; 
+    }
     
+    /* Botones */
     div.stButton > button { 
         background-color: #C0392B !important; 
         color: white !important; 
         border-radius: 8px !important; 
-        font-weight: 900 !important; 
+        font-weight: bold !important; 
         width: 100% !important; 
+    }
+    
+    /* Ajuste de inputs de texto */
+    textarea {
+        background-color: #2C3E50 !important;
+        color: #FFFFFF !important;
+        border: 1px solid #566573 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -72,14 +102,13 @@ with st.sidebar:
     st.write("---")
     active_ids = []
     
-    # Encabezados compactos
+    # Encabezados con blanco forzado
     h_col1, h_col2, h_col3, h_col4 = st.columns([1, 1, 1, 1])
-    with h_col1: st.write("**ID**")
-    with h_col2: st.write("**On**")
-    with h_col3: st.write("**🍴**")
-    with h_col4: st.write("**Exc.**")
+    with h_col1: st.markdown("**ID**")
+    with h_col2: st.markdown("**On**")
+    with h_col3: st.markdown("**🍴**")
+    with h_col4: st.markdown("**Exc.**")
     
-    # Filas compactas
     for sid in ALL_IDS:
         c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
         with c1: st.markdown(f"**ID {sid}**")
@@ -111,12 +140,12 @@ st.title("🏆 Dashboard de Productividad")
 
 c1, c2 = st.columns(2)
 with c1:
-    h_in = st.text_area("1. Productividad Acumulada del Mes", height=150)
+    h_in = st.text_area("1. Productividad Acumulada del Mes", height=120)
 with c2:
-    t_in = st.text_area("2. Productividad del Día", height=150)
+    t_in = st.text_area("2. Productividad del Día", height=120)
 
-if st.button("📊 ACTUALIZAR"):
-    # Regex ultra-flexible para nombres como "4 O. DAVILA 136" o "1 M.SANCHEZ 205"
+if st.button("📊 ACTUALIZAR DASHBOARD"):
+    # Regex optimizado para capturar nombres con puntos (O. DAVILA)
     pat = r"(\d+)\s+([A-Za-z0-9\s\.\-_]+?)\s+(\d+)(?:\s+(\d+))?"
     
     names_map, historical_data, historical_items = {}, {}, {}
@@ -164,23 +193,23 @@ if st.session_state.final_ranking:
     df.index = range(1, len(df) + 1)
     df.index.name = "Rank"
 
-    st.dataframe(df.style.format({
-        "Histórico": "{:,.0f}", "Hoy": "{:,.0f}", 
-        "Total Pedidos": "{:,.0f}", "Total Piezas": "{:,.0f}"
-    }), use_container_width=True)
+    st.dataframe(df, use_container_width=True)
 
-    col_chart, col_efficiency = st.columns([1.3, 0.7])
+    col_chart, col_efficiency = st.columns([1.2, 0.8])
 
     with col_chart:
         df['Label'] = "ID " + df['ID'].astype(str) + " - " + df['Surtidor']
         fig = px.pie(df, values='Total Pedidos', names='Label', hole=.3,
                      color_discrete_sequence=px.colors.sequential.Reds_r)
-        fig.update_traces(textinfo='percent+label', textfont_size=12)
-        fig.update_layout(height=500, font_family="Arial", showlegend=True,
+        fig.update_traces(textinfo='percent+label', textfont_size=12, textfont_color="white")
+        fig.update_layout(height=500, font_family="Arial", showlegend=False,
+                          paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                          font=dict(color="white"),
                           margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
 
     with col_efficiency:
+        st.markdown("### ⚡ Eficiencia (8h)")
         df_eff = df.copy()
         df_eff['Ped/Hr'] = (df_eff['Total Pedidos'] / 8).round(2)
         df_eff['Pza/Hr'] = (df_eff['Total Piezas'] / 8).round(2)
