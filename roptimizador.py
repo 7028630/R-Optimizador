@@ -11,14 +11,23 @@ st.set_page_config(page_title="Productividad Surtido", layout="wide")
 
 st.markdown("""
     <style>
-    /* Global Font Arial & Force White Text for everything */
+    /* Global Font Arial & Force White Text */
     html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3, span, label, th, td {
         font-family: Arial, Helvetica, sans-serif !important;
         color: #FFFFFF !important;
     }
 
-    /* Backgrounds */
+    /* Background Principal */
     .stApp { background-color: #17202A; } 
+
+    /* CAMUFLAJE DE LA BARRA SUPERIOR (TOOLBAR) */
+    header[data-testid="stHeader"] {
+        background-color: rgba(0,0,0,0) !important;
+    }
+    [data-testid="stAppToolbar"] {
+        background-color: transparent !important;
+        color: #FFFFFF !important;
+    }
     
     /* SIDEBAR COMPACTO */
     [data-testid="stSidebar"] { 
@@ -26,19 +35,14 @@ st.markdown("""
         min-width: 350px !important; 
     }
     
-    /* Force Table Text to White */
-    table { color: #FFFFFF !important; }
-    thead tr th { color: #FFFFFF !important; background-color: #212F3C !important; }
-    tbody tr td { color: #FFFFFF !important; }
+    /* Force Table Text to White & Arial */
+    table { color: #FFFFFF !important; width: 100%; border-collapse: collapse; }
+    thead tr th { color: #FFFFFF !important; background-color: #212F3C !important; font-family: Arial !important; text-align: left; padding: 10px; }
+    tbody tr td { color: #FFFFFF !important; border-bottom: 1px solid #2C3E50; padding: 8px; font-family: Arial !important; }
 
-    /* Hide the ghost icons */
-    [data-testid="stSidebarNav"] + div, button[title="Collapse sidebar"] > span {
-        display: none !important;
-    }
-    
-    /* Tight Sidebar Spacing */
+    /* Hide Ghost Icons & Extra padding */
+    [data-testid="stSidebarNav"] + div, button[title="Collapse sidebar"] > span { display: none !important; }
     [data-testid="stVerticalBlock"] > div { gap: 0.02rem !important; }
-    [data-testid="column"] { padding: 0px 2px !important; }
     .stCheckbox, .stToggleButton, .stMarkdown p { margin-bottom: 0px !important; padding-bottom: 0px !important; }
 
     /* Projection Boxes */
@@ -68,7 +72,7 @@ st.markdown("""
         font-weight: bold; 
     }
     
-    /* Buttons */
+    /* Red Buttons */
     div.stButton > button { 
         background-color: #C0392B !important; 
         color: #FFFFFF !important; 
@@ -173,7 +177,8 @@ if st.session_state.final_ranking:
     df.index = range(1, len(df) + 1)
     df.index.name = "Rank"
 
-    # Mostrar tabla principal con texto blanco forzado
+    # Ranking Table
+    st.markdown("### 📋 Tabla de Posiciones")
     st.table(df[["Surtidor", "Total Pedidos", "Total Piezas"]])
 
     col_chart, col_efficiency = st.columns([1.1, 0.9])
@@ -192,8 +197,7 @@ if st.session_state.final_ranking:
         df_eff = df.copy()
         df_eff['Ped/Hr'] = (df_eff['Total Pedidos'] / 8).round(2)
         df_eff['Pza/Hr'] = (df_eff['Total Piezas'] / 8).round(2)
-        # Forzar tabla de eficiencia a texto blanco
         st.table(df_eff[['Surtidor', 'Ped/Hr', 'Pza/Hr']])
 
 else:
-    st.info("Pega los datos para ver las tablas en blanco.")
+    st.info("Pega los datos para activar el dashboard.")
