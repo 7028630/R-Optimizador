@@ -31,15 +31,27 @@ st.markdown("""
         background-color: #111821 !important; 
         min-width: 320px !important; 
     }
+
+    /* 🛠️ FIX: HIDE GHOST TEXT (keyboard_double) */
+    [data-testid="stSidebarNav"] + div, 
+    button[title="Collapse sidebar"], 
+    [data-testid="collapsedControl"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* 🛠️ FIX: RESTORE FORK & KNIFE EMOJIS */
+    .lunch-label {
+        font-size: 1.2rem !important;
+        display: inline-block !important;
+        visibility: visible !important;
+    }
     
     /* Tables */
     table { color: #FFFFFF !important; width: 100%; border-collapse: collapse; }
     thead tr th { color: #FFFFFF !important; background-color: #212F3C !important; border-bottom: 2px solid #C0392B !important; }
     tbody tr td { color: #FFFFFF !important; border-bottom: 1px solid #2C3E50 !important; }
 
-    /* UI CLEANUP */
-    [data-testid="stSidebarNav"] + div, button[title="Collapse sidebar"] > span { display: none !important; }
-    
     /* TURNS UI */
     .turn-pill { 
         background: #C0392B; 
@@ -88,12 +100,18 @@ with st.sidebar:
     active_ids = []
     st.write("---")
     
+    # Headers with explicit emoji labels
+    h1, h2, h3 = st.columns([2, 1, 1])
+    with h1: st.markdown("**ID**")
+    with h2: st.markdown("**On**")
+    with h3: st.markdown('<span class="lunch-label">🍴</span>', unsafe_allow_html=True)
+
     # Selection area
     for sid in ALL_IDS:
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1: st.markdown(f"**ID {sid}**")
         with col2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
-        with col3: meal = st.toggle("🍴", key=f"m_{sid}", label_visibility="collapsed")
+        with col3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
         if on and not meal: 
             active_ids.append(sid)
 
@@ -102,28 +120,21 @@ with st.sidebar:
         st.write("---")
         st.markdown("### 🔄 Siguientes 20 Turnos")
         
-        # Simulate turns
         temp_scores = st.session_state.scores.copy()
         simulated_turns = []
         turn_counts = {}
 
         for _ in range(20):
-            # Only consider people currently toggled "On" and not "Eating"
             valid_candidates = {k: v for k, v in temp_scores.items() if k in active_ids}
             if not valid_candidates: break
-            
-            # The person with the lowest current order count gets the next turn
             next_person = min(valid_candidates, key=valid_candidates.get)
             simulated_turns.append(next_person)
             turn_counts[next_person] = turn_counts.get(next_person, 0) + 1
             temp_scores[next_person] += 1
         
-        # Visual display of sequence
         st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in simulated_turns]), unsafe_allow_html=True)
         
-        # Visual display of total counts per person
         summary_html = '<div class="summary-box"><b>Distribución:</b><br>'
-        # Sort summary by count descending
         sorted_counts = sorted(turn_counts.items(), key=lambda x: x[1], reverse=True)
         for sid, count in sorted_counts:
             name = KNOWN_FIXES.get(sid, f"ID {sid}")
@@ -174,7 +185,6 @@ if st.button("📊 ACTUALIZAR DASHBOARD"):
         })
     
     st.session_state.final_ranking = sorted(combined, key=lambda x: x['Pedidos'], reverse=True)
-    # Store the actual current counts for turn logic
     st.session_state.scores = {sid: data_p.get(sid, 0) for sid in ALL_IDS}
     st.rerun()
 
