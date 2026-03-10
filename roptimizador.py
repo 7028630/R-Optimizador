@@ -5,13 +5,6 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 ALL_IDS = list(range(1, 22)) 
-KNOWN_FIXES = {
-    1: "M. SANCHEZ", 2: "K. IBARRA", 3: "C. RODRIGUEZ", 4: "O. DAVILA",
-    5: "H. CRUZ", 6: "D. CASTILLO", 7: "C. GARCIA", 8: "C. SILVA",
-    9: "M. HERNANDEZ", 10: "H. BARBOZA", 11: "J. RENTERIA", 
-    12: "R. GONZALEZ", 13: "J. PEREZ", 14: "J. SILVA",
-    18: "LIDERES DE OPERACIONES"
-}
 
 # --- UI STYLE ---
 st.set_page_config(page_title="Productividad Surtido", layout="wide")
@@ -32,7 +25,7 @@ st.markdown("""
         min-width: 320px !important; 
     }
 
-    /* 🛠️ FIX: HIDE GHOST TEXT (keyboard_double) */
+    /* HIDE GHOST TEXT (keyboard_double) */
     [data-testid="stSidebarNav"] + div, 
     button[title="Collapse sidebar"], 
     [data-testid="collapsedControl"] {
@@ -40,7 +33,7 @@ st.markdown("""
         visibility: hidden !important;
     }
 
-    /* 🛠️ FIX: RESTORE FORK & KNIFE EMOJIS */
+    /* RESTORE FORK & KNIFE EMOJIS */
     .lunch-label {
         font-size: 1.2rem !important;
         display: inline-block !important;
@@ -100,7 +93,7 @@ with st.sidebar:
     active_ids = []
     st.write("---")
     
-    # Headers with explicit emoji labels
+    # Headers
     h1, h2, h3 = st.columns([2, 1, 1])
     with h1: st.markdown("**ID**")
     with h2: st.markdown("**On**")
@@ -109,7 +102,7 @@ with st.sidebar:
     # Selection area
     for sid in ALL_IDS:
         col1, col2, col3 = st.columns([2, 1, 1])
-        with col1: st.markdown(f"**ID {sid}**")
+        with col1: st.markdown(f"**Surtidor {sid}**")
         with col2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
         with col3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
         if on and not meal: 
@@ -132,18 +125,18 @@ with st.sidebar:
             turn_counts[next_person] = turn_counts.get(next_person, 0) + 1
             temp_scores[next_person] += 1
         
-        st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in simulated_turns]), unsafe_allow_html=True)
+        # Display sequence as Surtidor numbers
+        st.markdown("".join([f'<span class="turn-pill">S{t}</span>' for t in simulated_turns]), unsafe_allow_html=True)
         
         summary_html = '<div class="summary-box"><b>Distribución:</b><br>'
         sorted_counts = sorted(turn_counts.items(), key=lambda x: x[1], reverse=True)
         for sid, count in sorted_counts:
-            name = KNOWN_FIXES.get(sid, f"ID {sid}")
-            summary_html += f'<div class="summary-row"><span>{name}</span> <span>+{count} ped</span></div>'
+            summary_html += f'<div class="summary-row"><span>Surtidor {sid}</span> <span>+{count} ped</span></div>'
         summary_html += '</div>'
         st.markdown(summary_html, unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
-st.title("🏆 Dashboard de Productividad")
+st.title("🏆 Dashboard de Productividad Anónimo")
 
 c1, c2 = st.columns(2)
 with c1:
@@ -152,8 +145,9 @@ with c2:
     t_in = st.text_area("2. Datos Live (Hoy)", height=150)
 
 if st.button("📊 ACTUALIZAR DASHBOARD"):
+    # Regex captures the ID, ignores the name, and captures the numbers
     pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
-    data_p, data_i, names_map = {}, {}, {}
+    data_p, data_i = {}, {}
 
     def clean_val(v):
         if not v or '-' in str(v): return 0
@@ -162,27 +156,20 @@ if st.button("📊 ACTUALIZAR DASHBOARD"):
     for raw_text in [h_in, t_in]:
         if raw_text.strip():
             matches = re.findall(pat, raw_text)
-            for sid_raw, name_raw, ped, pza in matches:
+            for sid_raw, _, ped, pza in matches:
                 sid = int(sid_raw)
                 data_p[sid] = data_p.get(sid, 0) + clean_val(ped)
                 data_i[sid] = data_i.get(sid, 0) + clean_val(pza)
-                
-                raw_n = str(name_raw).strip().upper() if name_raw else ""
-                if sid in KNOWN_FIXES and (not raw_n or "0" in raw_n or "-" in raw_n):
-                    names_map[sid] = KNOWN_FIXES[sid]
-                elif raw_n and not raw_n.isdigit():
-                    names_map[sid] = raw_n
-                else:
-                    names_map[sid] = KNOWN_FIXES.get(sid, f"ID {sid}")
 
     combined = []
     for sid, peds in data_p.items():
-        combined.append({
-            "ID": sid,
-            "Surtidor": names_map.get(sid, f"ID {sid}"),
-            "Pedidos": peds,
-            "Piezas": data_i.get(sid, 0)
-        })
+        if peds > 0 or data_i.get(sid, 0) > 0:
+            combined.append({
+                "ID": sid,
+                "Surtidor": f"Surtidor {sid}",
+                "Pedidos": peds,
+                "Piezas": data_i.get(sid, 0)
+            })
     
     st.session_state.final_ranking = sorted(combined, key=lambda x: x['Pedidos'], reverse=True)
     st.session_state.scores = {sid: data_p.get(sid, 0) for sid in ALL_IDS}
@@ -197,8 +184,7 @@ if st.session_state.final_ranking:
     col_chart, col_table = st.columns([1.3, 0.7])
 
     with col_chart:
-        df['Label'] = "ID " + df['ID'].astype(str) + " - " + df['Surtidor']
-        fig = px.pie(df, values='Pedidos', names='Label', hole=.4,
+        fig = px.pie(df, values='Pedidos', names='Surtidor', hole=.4,
                      color_discrete_sequence=px.colors.sequential.Reds_r)
         fig.update_traces(textinfo='percent+label', textfont_size=14, marker=dict(line=dict(color='#17202A', width=2)))
         fig.update_layout(
@@ -211,7 +197,7 @@ if st.session_state.final_ranking:
         st.plotly_chart(fig, use_container_width=True)
 
     with col_table:
-        st.markdown("### 🏅 Ranking")
+        st.markdown("### 🏅 Ranking (IDs)")
         st.table(df[["Surtidor", "Pedidos", "Piezas"]])
         
         st.markdown("### ⚡ Eficiencia")
