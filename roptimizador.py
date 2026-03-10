@@ -11,189 +11,157 @@ st.set_page_config(page_title="Productividad Surtido", layout="wide")
 
 st.markdown("""
     <style>
-    /* Global Font Arial & Force White Text for everything */
+    /* Arial & Blanco Global */
     html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3, span, label, th, td {
         font-family: Arial, Helvetica, sans-serif !important;
         color: #FFFFFF !important;
     }
-
-    /* Backgrounds */
     .stApp { background-color: #17202A; } 
-    
-    /* SIDEBAR COMPACTO */
-    [data-testid="stSidebar"] { 
-        background-color: #111821 !important; 
-        min-width: 350px !important; 
-    }
-    
-    /* Force Table Text to White */
-    table { color: #FFFFFF !important; }
-    thead tr th { color: #FFFFFF !important; background-color: #212F3C !important; }
-    tbody tr td { color: #FFFFFF !important; }
 
-    /* Hide the ghost icons */
-    [data-testid="stSidebarNav"] + div, button[title="Collapse sidebar"] > span {
+    /* Matar Toolbar y Textos Fantasmas */
+    [data-testid="collapsedControl"], header, .st-emotion-cache-1wbqy5l {
         display: none !important;
+        visibility: hidden !important;
     }
     
-    /* Tight Sidebar Spacing */
-    [data-testid="stVerticalBlock"] > div { gap: 0.02rem !important; }
-    [data-testid="column"] { padding: 0px 2px !important; }
-    .stCheckbox, .stToggleButton, .stMarkdown p { margin-bottom: 0px !important; padding-bottom: 0px !important; }
+    [data-testid="stSidebar"] { background-color: #111821 !important; min-width: 350px !important; }
+    
+    /* Tablas */
+    table { color: #FFFFFF !important; width: 100%; border-collapse: collapse; }
+    thead tr th { background-color: #212F3C !important; padding: 10px; border: 1px solid #34495E; }
+    tbody tr td { border: 1px solid #2C3E50; padding: 8px; }
 
-    /* Projection Boxes */
-    .summary-box { 
-        background-color: #212F3C; 
-        padding: 8px; 
-        border-radius: 8px; 
-        margin-top: 5px; 
-        border: 1px solid #C0392B; 
-    }
-    .summary-row { 
-        display: flex; 
-        justify-content: space-between; 
-        border-bottom: 1px solid #2C3E50; 
-        padding: 2px 0; 
-        font-size: 0.85rem !important; 
-        color: #FFFFFF !important;
-    }
-    .turn-pill { 
-        background: #C0392B; 
-        color: #FFFFFF !important; 
-        padding: 2px 8px; 
-        border-radius: 6px; 
-        margin: 2px; 
-        display: inline-block; 
-        font-size: 0.8rem; 
-        font-weight: bold; 
-    }
+    .summary-box { background-color: #212F3C; padding: 8px; border-radius: 8px; border: 1px solid #C0392B; }
+    .turn-pill { background: #C0392B; color: white !important; padding: 2px 8px; border-radius: 6px; margin: 2px; display: inline-block; font-weight: bold; }
     
-    /* Buttons */
-    div.stButton > button { 
-        background-color: #C0392B !important; 
-        color: #FFFFFF !important; 
-        border-radius: 8px !important; 
-        font-weight: bold !important; 
-        width: 100% !important; 
-    }
+    div.stButton > button { background-color: #C0392B !important; color: white !important; width: 100%; }
     </style>
 """, unsafe_allow_html=True)
 
-if 'final_ranking' not in st.session_state: st.session_state.final_ranking = []
+# --- LOGIC: DATA EXTRACTION ---
+def parse_smart(text):
+    """Extrae datos sin importar el orden de las líneas."""
+    data = {}
+    # Limpiamos el texto y lo dividimos por líneas o espacios grandes
+    tokens = [t.strip() for t in re.split(r'\n|\s{2,}', text) if t.strip()]
+    
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        # Si el token es un número que coincide con nuestros IDs
+        if token.isdigit() and int(token) in ALL_IDS:
+            sid = int(token)
+            name = "SIN NOMBRE"
+            val1 = 0.0
+            val2 = 0.0
+            
+            # Buscamos hacia adelante para llenar los datos de ese ID
+            curr = i + 1
+            found_data = 0
+            while curr < len(tokens) and found_data < 3:
+                next_t = tokens[curr]
+                # Si nos topamos con otro ID, paramos
+                if next_t.isdigit() and int(next_t) in ALL_IDS:
+                    break
+                
+                # Intentamos ver si es número (pedidos/piezas) o nombre
+                try:
+                    num = float(next_t.replace(',', ''))
+                    if found_data == 0: # Si es el primer dato y es número, el nombre se saltó
+                         val1 = num
+                         found_data = 2 # Saltamos a buscar el segundo número
+                    elif found_data >= 1:
+                         if found_data == 1: val1 = num
+                         else: val2 = num
+                         found_data += 1
+                except ValueError:
+                    # Es texto, por lo tanto es el nombre
+                    if found_data == 0:
+                        name = next_t.upper()
+                        found_data = 1
+                curr += 1
+            
+            data[sid] = {"name": name, "pedidos": val1, "piezas": val2}
+            i = curr - 1
+        i += 1
+    return data
+
+# --- APP STATE ---
+if 'ranking' not in st.session_state: st.session_state.ranking = []
 if 'scores' not in st.session_state: st.session_state.scores = {}
 
-# --- SIDEBAR: DISPONIBILIDAD ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.markdown("## ⚙️ Disponibilidad")
-    if st.button("🗑️ REINICIAR TODO"): 
-        for k in list(st.session_state.keys()): del st.session_state[k]
+    if st.button("🗑️ REINICIAR"):
+        st.session_state.clear()
         st.rerun()
     
-    st.write("---")
     active_ids = []
-    h_col1, h_col2, h_col3, h_col4 = st.columns([1, 1, 1, 1])
-    with h_col1: st.markdown("**ID**")
-    with h_col2: st.markdown("**On**")
-    with h_col3: st.markdown("**🍴**")
-    with h_col4: st.markdown("**Exc.**")
-    
+    st.write("---")
+    cols = st.columns([1, 1, 1, 1])
+    headers = ["ID", "On", "🍴", "Exc"]
+    for col, h in zip(cols, headers): col.markdown(f"**{h}**")
+
     for sid in ALL_IDS:
         c1, c2, c3, c4 = st.columns([1, 1, 1, 1])
-        with c1: st.markdown(f"**ID {sid}**")
-        with c2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
-        with c3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
-        with c4: pdr = st.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
+        c1.markdown(f"ID {sid}")
+        on = c2.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
+        meal = c3.toggle("", key=f"m_{sid}", label_visibility="collapsed")
+        exc = c4.checkbox("", key=f"p_{sid}", label_visibility="collapsed")
         if on and not meal: active_ids.append(sid)
 
-    if st.session_state.scores and active_ids:
-        st.write("---")
-        st.markdown("### 🔄 Siguientes 20")
-        ts = st.session_state.scores.copy()
-        turns, counts = [], {}
-        for _ in range(20):
-            valid_scores = {k: v for k, v in ts.items() if k in active_ids}
-            if not valid_scores: break
-            next_id = min(valid_scores, key=valid_scores.get)
-            turns.append(next_id); counts[next_id] = counts.get(next_id, 0) + 1; ts[next_id] += 1
-        
-        st.markdown("".join([f'<span class="turn-pill">{t}</span>' for t in turns]), unsafe_allow_html=True)
-        summary_html = '<div class="summary-box">'
-        for sid, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
-            summary_html += f'<div class="summary-row"><span>ID {sid}</span> <span>{count} pzs</span></div>'
-        st.markdown(summary_html + '</div>', unsafe_allow_html=True)
-
-# --- MAIN CONTENT ---
+# --- MAIN ---
 st.title("🏆 Dashboard de Productividad")
 
 c1, c2 = st.columns(2)
-with c1:
-    h_in = st.text_area("1. Productividad Acumulada del Mes", height=100)
-with c2:
-    t_in = st.text_area("2. Productividad del Día", height=100)
+h_in = c1.text_area("1. Acumulado Mes", height=150, placeholder="Pega aquí...")
+t_in = c2.text_area("2. Datos Hoy", height=150, placeholder="Pega aquí...")
 
-if st.button("📊 ACTUALIZAR DASHBOARD"):
-    pat = r"(\d+)\s+([A-Za-z0-9\s\.\-_]+?)\s+(\d+)(?:\s+(\d+))?"
-    names_map, h_data, h_items = {}, {}, {}
+if st.button("📊 ACTUALIZAR"):
+    h_map = parse_smart(h_in)
+    t_map = parse_smart(t_in)
     
-    if h_in.strip():
-        for sid_raw, name, count, items in re.findall(pat, h_in):
-            sid = int(sid_raw)
-            h_data[sid] = h_data.get(sid, 0) + int(count)
-            h_items[sid] = h_items.get(sid, 0) + (int(items) if items and items.isdigit() else 0)
-            names_map[sid] = name.strip()
-
-    t_data, t_items = {}, {}
-    if t_in.strip():
-        for sid_raw, name, count, items in re.findall(pat, t_in):
-            sid = int(sid_raw)
-            t_data[sid] = int(count)
-            t_items[sid] = (int(items) if items and items.isdigit() else 0)
-            if sid not in names_map: names_map[sid] = name.strip()
-
-    combined, current_scores = [], {}
+    combined = []
+    new_scores = {}
+    
     for sid in ALL_IDS:
-        tot_p = h_data.get(sid, 0) + t_data.get(sid, 0)
-        tot_i = h_items.get(sid, 0) + t_items.get(sid, 0)
-        current_scores[sid] = tot_p
-        if sid in active_ids or tot_p > 0:
+        h = h_map.get(sid, {"name": f"ID {sid}", "pedidos": 0, "piezas": 0})
+        t = t_map.get(sid, {"name": f"ID {sid}", "pedidos": 0, "piezas": 0})
+        
+        # El nombre real es el que no sea "ID X" o "SIN NOMBRE"
+        final_name = t["name"] if "ID" not in t["name"] and t["name"] != "SIN NOMBRE" else h["name"]
+        total_p = h["pedidos"] + t["pedidos"]
+        total_i = h["piezas"] + t["piezas"]
+        
+        new_scores[sid] = total_p
+        
+        if sid in active_ids or total_p > 0:
             combined.append({
-                "ID": sid, "Surtidor": names_map.get(sid, f"ID {sid}").upper(),
-                "Histórico": h_data.get(sid, 0), "Hoy": t_data.get(sid, 0), 
-                "Total Pedidos": tot_p, "Total Piezas": tot_i
+                "ID": sid, "Surtidor": final_name,
+                "Total Pedidos": total_p, "Total Piezas": total_i
             })
     
-    st.session_state.final_ranking = sorted(combined, key=lambda x: x['Total Pedidos'], reverse=True)
-    st.session_state.scores = current_scores
+    st.session_state.ranking = sorted(combined, key=lambda x: x['Total Pedidos'], reverse=True)
+    st.session_state.scores = new_scores
     st.rerun()
 
-# --- DISPLAY ---
-if st.session_state.final_ranking:
-    st.write("---")
-    df = pd.DataFrame(st.session_state.final_ranking)
-    df.index = range(1, len(df) + 1)
-    df.index.name = "Rank"
-
-    # Mostrar tabla principal con texto blanco forzado
+if st.session_state.ranking:
+    df = pd.DataFrame(st.session_state.ranking)
     st.table(df[["Surtidor", "Total Pedidos", "Total Piezas"]])
 
-    col_chart, col_efficiency = st.columns([1.1, 0.9])
-
+    col_chart, col_eff = st.columns([1.4, 0.6])
+    
     with col_chart:
-        df['Label'] = "ID " + df['ID'].astype(str) + " - " + df['Surtidor']
-        fig = px.pie(df, values='Total Pedidos', names='Label', hole=.3,
-                     color_discrete_sequence=px.colors.sequential.Reds_r)
-        fig.update_traces(textinfo='percent+label', textfont_size=12, textfont_color="white")
-        fig.update_layout(height=450, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', 
-                          font=dict(color="white"), margin=dict(t=10, b=10, l=10, r=10))
+        fig = px.pie(df, values='Total Pedidos', names='Surtidor', hole=0.3,
+                     color_discrete_sequence=px.colors.sequential.Reds_r + ['#FFFFFF'])
+        fig.update_traces(textinfo='percent+label', textfont_size=15, 
+                          marker=dict(line=dict(color='#17202A', width=2)))
+        fig.update_layout(height=700, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', 
+                          margin=dict(t=0,b=0,l=0,r=0))
         st.plotly_chart(fig, use_container_width=True)
-
-    with col_efficiency:
+        
+    with col_eff:
         st.markdown("### ⚡ Eficiencia (8h)")
-        df_eff = df.copy()
-        df_eff['Ped/Hr'] = (df_eff['Total Pedidos'] / 8).round(2)
-        df_eff['Pza/Hr'] = (df_eff['Total Piezas'] / 8).round(2)
-        # Forzar tabla de eficiencia a texto blanco
-        st.table(df_eff[['Surtidor', 'Ped/Hr', 'Pza/Hr']])
-
-else:
-    st.info("Pega los datos para ver las tablas en blanco.")
+        df['Ped/Hr'] = (df['Total Pedidos'] / 8).round(2)
+        st.table(df[['Surtidor', 'Ped/Hr']])
