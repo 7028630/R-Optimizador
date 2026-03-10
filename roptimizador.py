@@ -1,63 +1,48 @@
 import re
 import pandas as pd
 
-def parse_surtidor_data(raw_text):
-    """
-    Unified parser for structured and collapsed "Surtidor" data.
-    Works even if the data is squashed together.
-    """
-    # Pattern Logic:
-    # (\d+)            -> Group 1: The ID (1-2 digits)
-    # ([A-Z\.\s/]+)    -> Group 2: The Name (Letters, dots, spaces, slashes)
-    # (\d+)            -> Group 3: Pedidos (The first number after the name)
-    # ([\d\.\-]+)      -> Group 4: Piezas (Numbers with decimals or a dash)
-    pattern = r'(\d{1,2})([A-Z\.\s/]{3,25}?)(\d+)([\d\.\-]+)'
+def universal_cleaner(raw_text):
+    # 1. First, we remove "Total", "SIN NOMBRE", and "ID" junk that causes 0.0000 results
+    text = re.sub(r'SIN NOMBRE|ID \d+|0\.0000|No\.|SURTIDOR|PEDIDOS|PIEZAS|Total', '', raw_text, flags=re.IGNORECASE)
     
-    # Pre-cleaning: Remove headers and footer noise to prevent false matches
-    clean_text = re.sub(r'No\.|SURTIDOR|PEDIDOS|PIEZAS|Total.*|SIN NOMBRE', '', raw_text, flags=re.IGNORECASE)
+    # 2. This regex is the "magic" for squashed data:
+    # (\d+)         -> The ID number
+    # ([A-Z\.\s]+?) -> The name (stops as soon as it sees the next number)
+    # (\d+)         -> The Pedidos
+    # ([\d\.\-]+)   -> The Piezas
+    pattern = r'(\d+)\s*([A-Za-z\.\s/]+?)\s*(\d+)\s*([\d\.\-]+)'
     
-    matches = re.findall(pattern, clean_text)
+    matches = re.findall(pattern, text)
     
-    data = []
+    # 3. If it's STILL blank, try the "Zero-Space" pattern for the 'Today's' data mess
+    if not matches:
+        # This one looks for numbers directly hitting letters: e.g., 5H.CRUZ252.420
+        pattern_collapsed = r'(\d+)([A-Z\.\s/]+)(\d+)([\d\.\-]+)'
+        matches = re.findall(pattern_collapsed, text)
+
+    results = []
     for m in matches:
         idx, name, pedidos, piezas = m
-        
-        # Clean up the name from trailing/leading whitespace
-        name = name.strip()
-        
-        # Convert piezas: replace dash with 0, remove extra dots if it's a thousands separator
-        piezas_clean = piezas.replace('-', '0').strip()
-        
-        data.append({
-            "No.": int(idx),
-            "Surtidor": name,
-            "Pedidos": int(pedidos),
-            "Piezas": piezas_clean
-        })
+        # Only keep it if it's actual work (pedidos > 0)
+        if int(pedidos) > 0:
+            results.append({
+                "No": idx.strip(),
+                "Surtidor": name.strip(),
+                "Pedidos": int(pedidos),
+                "Piezas": piezas.strip()
+            })
 
-    df = pd.DataFrame(data)
-    
-    # If the same ID appears multiple times (History + Today), we group them
-    if not df.empty:
-        summary = df.groupby(['No.', 'Surtidor']).agg({
-            'Pedidos': 'sum',
-            'Piezas': lambda x: "Combined Records" # Or sum if you convert to float
-        }).reset_index()
-        return df, summary
-    
-    return df, None
+    return pd.DataFrame(results)
 
-# --- HOW TO USE ---
-# Replace the triple quotes content with your actual paste
-raw_input = """
-[PASTE YOUR ENTIRE HISTORIAL AND TODAY'S DATA HERE]
+# --- PASTE EVERYTHING BELOW ---
+data_blob = """
+[PASTE YOUR ENTIRE TEXT HERE]
 """
 
-all_records, total_summary = parse_surtidor_data(raw_input)
+df = universal_cleaner(data_blob)
 
-# Output results
-print("--- DETAILED RECORDS EXTRACTED ---")
-print(all_records.to_string(index=False))
-
-# Optional: Export to CSV for Excel
-# all_records.to_csv("surtidor_report.csv", index=False)
+if df.empty:
+    print("⚠️ Still Blank. Please check if the 'data_blob' variable actually contains the text.")
+else:
+    print("✅ DATA RECOVERED:")
+    print(df.to_string(index=False))
