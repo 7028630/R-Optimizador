@@ -5,9 +5,10 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 ALL_IDS = list(range(1, 22)) 
+# Direct CSV Export URL
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv"
 
-# --- UI STYLE (EXACTLY AS ORIGINAL) ---
+# --- UI STYLE (ORIGINAL) ---
 st.set_page_config(page_title="Productividad Surtido", layout="wide")
 
 st.markdown("""
@@ -131,6 +132,7 @@ with st.sidebar:
             turn_counts[next_person] = turn_counts.get(next_person, 0) + 1
             temp_scores[next_person] += 1
         st.markdown("".join([f'<span class="turn-pill">S{t}</span>' for t in simulated_turns]), unsafe_allow_html=True)
+        
         summary_html = '<div class="summary-box"><b>Distribución:</b><br>'
         sorted_counts = sorted(turn_counts.items(), key=lambda x: x[1], reverse=True)
         for sid, count in sorted_counts:
@@ -143,7 +145,7 @@ st.title("📦💊 Panel de Productividad 💊📦")
 
 c1, c2 = st.columns(2)
 with c1:
-    h_in = st.text_area("1. Histórico Acumulado (Manual o Auto)", height=150)
+    h_in = st.text_area("1. Histórico Adicional (Opcional)", height=150)
 with c2:
     t_in = st.text_area("2. Datos Live (Hoy)", height=150)
 
@@ -156,7 +158,7 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
         s = str(v).replace(',', '').replace('.', '')
         return int(s) if s.isdigit() else 0
 
-    # --- FEEDING LOGIC (GOOGLE SHEET SCAN) ---
+    # --- NEW AUTO-FEEDING LOGIC ---
     try:
         df_raw = pd.read_csv(SHEET_URL, header=None)
         for r in range(len(df_raw)):
@@ -165,14 +167,15 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
                 if cell.isdigit() and int(cell) in ALL_IDS:
                     sid = int(cell)
                     try:
+                        # Scan relative to ID position found in image layout
                         ped = clean_val(df_raw.iloc[r, c + 2])
                         pza = clean_val(df_raw.iloc[r, c + 3])
                         data_p[sid] = data_p.get(sid, 0) + ped
                         data_i[sid] = data_i.get(sid, 0) + pza
                     except: continue
-    except: pass # Silently fail to keep original behavior if sheet fails
+    except: pass
 
-    # --- REMAINING ORIGINAL LOGIC ---
+    # --- ORIGINAL TEXT AREA PROCESSING ---
     for raw_text in [h_in, t_in]:
         if raw_text.strip():
             matches = re.findall(pat, raw_text)
@@ -184,32 +187,52 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     combined = []
     for sid, peds in data_p.items():
         if peds > 0 or data_i.get(sid, 0) > 0:
-            combined.append({"ID": sid, "Surtidor": f"Surtidor {sid}", "Pedidos": peds, "Piezas": data_i.get(sid, 0)})
+            combined.append({
+                "ID": sid,
+                "Surtidor": f"Surtidor {sid}",
+                "Pedidos": peds,
+                "Piezas": data_i.get(sid, 0)
+            })
     
     st.session_state.final_ranking = sorted(combined, key=lambda x: x['Pedidos'], reverse=True)
     st.session_state.scores = {sid: data_p.get(sid, 0) for sid in ALL_IDS}
     st.rerun()
 
-# --- VISUALS (EXACTLY AS ORIGINAL) ---
+# --- VISUALS (ORIGINAL SIZE & STYLE) ---
 if st.session_state.final_ranking:
     st.write("---")
     df = pd.DataFrame(st.session_state.final_ranking)
     df.index = range(1, len(df) + 1)
+
     col_chart, col_table = st.columns([1.3, 0.7])
 
     with col_chart:
-        fig = px.pie(df, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
+        fig = px.pie(df, values='Pedidos', names='Surtidor', hole=.4,
+                     color_discrete_sequence=px.colors.sequential.Reds_r)
         fig.update_traces(textinfo='percent+label', textfont_size=14, marker=dict(line=dict(color='#17202A', width=2)))
-        fig.update_layout(height=850, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(t=10, b=10, l=10, r=10))
+        fig.update_layout(
+            height=850,
+            showlegend=False,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            margin=dict(t=10, b=10, l=10, r=10)
+        )
         st.plotly_chart(fig, use_container_width=True)
 
         stdev_val = df['Pedidos'].std()
         avg_val = df['Pedidos'].mean()
-        st.markdown(f'<div class="stats-container"><span style="font-size: 0.9rem; color: #BDC3C7;">Balance de Carga (Pedidos)</span><br><span style="font-size: 1.8rem; font-weight: bold; color: #FFFFFF;">σ {stdev_val:.2f}</span><br><span style="font-size: 0.8rem; color: #E74C3C;">Promedio: {avg_val:.1f}</span></div>', unsafe_allow_html=True)
+        st.markdown(f"""
+            <div class="stats-container">
+                <span style="font-size: 0.9rem; color: #BDC3C7;">Balance de Carga (Pedidos)</span><br>
+                <span style="font-size: 1.8rem; font-weight: bold; color: #FFFFFF;">σ {stdev_val:.2f}</span><br>
+                <span style="font-size: 0.8rem; color: #E74C3C;">Promedio: {avg_val:.1f}</span>
+            </div>
+        """, unsafe_allow_html=True)
 
     with col_table:
         st.markdown("### 🏅 Ranking (IDs)")
         st.table(df[["Surtidor", "Pedidos", "Piezas"]])
+        
         st.markdown("### ⚡ Eficiencia")
         df_eff = df.copy()
         df_eff['P/Hr'] = (df_eff['Pedidos'] / 8).round(1)
