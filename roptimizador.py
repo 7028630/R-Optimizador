@@ -5,6 +5,8 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 ALL_IDS = list(range(1, 22)) 
+# Google Sheet CSV Export Link
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv"
 
 # --- UI STYLE ---
 st.set_page_config(page_title="Productividad Surtido", layout="wide")
@@ -25,7 +27,7 @@ st.markdown("""
         min-width: 320px !important; 
     }
 
-    /* HIDE GHOST TEXT (◕⁠ᴗ⁠◕⁠✿⁠) */
+    /* HIDE GHOST TEXT */
     [data-testid="stSidebarNav"] + div, 
     button[title="Collapse sidebar"], 
     [data-testid="collapsedControl"] {
@@ -149,26 +151,43 @@ st.title("📦💊 Panel de Productividad 💊📦")
 
 c1, c2 = st.columns(2)
 with c1:
-    h_in = st.text_area("1. Histórico Acumulado", height=150)
+    st.info("📊 **Histórico:** Se cargará automáticamente desde Google Sheets.")
 with c2:
-    t_in = st.text_area("2. Datos Live (Hoy)", height=150)
+    t_in = st.text_area("2. Datos Live (Hoy)", height=150, placeholder="Pega aquí los datos de hoy...")
 
 if st.button(" ✳️ ACTUALIZAR PANEL"):
     pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
     data_p, data_i = {}, {}
 
     def clean_val(v):
-        if not v or '-' in str(v): return 0
+        if not v or '-' in str(v) or str(v).strip() == "": return 0
         s = str(v).replace(',', '').replace('.', '')
         return int(s)
 
-    for raw_text in [h_in, t_in]:
-        if raw_text.strip():
-            matches = re.findall(pat, raw_text)
-            for sid_raw, _, ped, pza in matches:
-                sid = int(sid_raw)
-                data_p[sid] = data_p.get(sid, 0) + clean_val(ped)
-                data_i[sid] = data_i.get(sid, 0) + clean_val(pza)
+    # --- 1. FETCH FROM GOOGLE SHEETS (HISTORIAL) ---
+    try:
+        df_sheet = pd.read_csv(SHEET_URL)
+        # Assuming sheet columns are: ID, Name, Pedidos, Piezas (or similar order)
+        # We apply the same logic to the sheet rows
+        for index, row in df_sheet.iterrows():
+            try:
+                sid = int(row.iloc[0]) # First column as ID
+                ped = clean_val(row.iloc[2]) # Third column as Pedidos
+                pza = clean_val(row.iloc[3]) # Fourth column as Piezas
+                data_p[sid] = data_p.get(sid, 0) + ped
+                data_i[sid] = data_i.get(sid, 0) + pza
+            except:
+                continue
+    except Exception as e:
+        st.error(f"Error cargando Google Sheets: {e}")
+
+    # --- 2. FETCH FROM LIVE INPUT (MANUAL) ---
+    if t_in.strip():
+        matches = re.findall(pat, t_in)
+        for sid_raw, _, ped, pza in matches:
+            sid = int(sid_raw)
+            data_p[sid] = data_p.get(sid, 0) + clean_val(ped)
+            data_i[sid] = data_i.get(sid, 0) + clean_val(pza)
 
     combined = []
     for sid, peds in data_p.items():
@@ -205,7 +224,7 @@ if st.session_state.final_ranking:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # 📉 NEW: Standard Deviation Section
+        # 📉 Standard Deviation Section
         stdev_val = df['Pedidos'].std()
         avg_val = df['Pedidos'].mean()
         st.markdown(f"""
