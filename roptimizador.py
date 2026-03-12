@@ -89,15 +89,12 @@ with st.sidebar:
 # --- MAIN CONTENT ---
 st.title("📦💊 Panel de Productividad 💊📦")
 
-c1, c2 = st.columns(2)
-with c1:
-    if st.session_state.manual_mode:
-        h_in = st.text_area("1. Histórico Acumulado (Pegar)", height=150)
-    else:
-        st.info("🌐 Alimentando desde Google Sheets (Histórico)")
-        h_in = ""
-with c2:
-    t_in = st.text_area("2. Datos Live (Hoy)", height=150)
+# Input Section
+if st.session_state.manual_mode:
+    h_in = st.text_area("1. Histórico Acumulado (Pegar)", height=150)
+else:
+    st.info("🌐 Alimentando desde Google Sheets (Histórico)")
+    h_in = ""
 
 if st.button(" ✳️ ACTUALIZAR PANEL"):
     pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
@@ -123,14 +120,13 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
                         except: continue
         except: pass
 
-    # 2. PROCESS TEXT INPUTS
-    for raw_text in [h_in, t_in]:
-        if raw_text.strip():
-            matches = re.findall(pat, raw_text)
-            for sid_raw, _, ped, pza in matches:
-                sid = int(sid_raw)
-                data_p[sid] = data_p.get(sid, 0) + clean_val(ped)
-                data_i[sid] = data_i.get(sid, 0) + clean_val(pza)
+    # 2. PROCESS MANUAL TEXT INPUT (Historical Only)
+    if st.session_state.manual_mode and h_in.strip():
+        matches = re.findall(pat, h_in)
+        for sid_raw, _, ped, pza in matches:
+            sid = int(sid_raw)
+            data_p[sid] = data_p.get(sid, 0) + clean_val(ped)
+            data_i[sid] = data_i.get(sid, 0) + clean_val(pza)
 
     combined = []
     for sid, peds in data_p.items():
