@@ -7,7 +7,7 @@ import plotly.express as px
 ALL_IDS = list(range(1, 22)) 
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv"
 
-# --- UI STYLE (ORIGINAL) ---
+# --- UI STYLE ---
 st.set_page_config(page_title="Productividad Surtido", layout="wide")
 
 st.markdown("""
@@ -41,49 +41,24 @@ if 'manual_mode' not in st.session_state: st.session_state.manual_mode = False
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("## ✅Asistencia/Comida🍱")
-    
     if st.button("⌨️ MODO MANUAL (PEGAR)" if not st.session_state.manual_mode else "🌐 MODO AUTO (SHEET)"):
         st.session_state.manual_mode = not st.session_state.manual_mode
         st.rerun()
-
     if st.button("🔄 REINICIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
-    
     active_ids = []
     st.write("---")
     h1, h2, h3 = st.columns([2, 1, 1])
     with h1: st.markdown("**ID**")
     with h2: st.markdown("**On**")
     with h3: st.markdown('<span class="lunch-label">🍴</span>', unsafe_allow_html=True)
-
     for sid in ALL_IDS:
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1: st.markdown(f"**Surtidor {sid}**")
         with col2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
         with col3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
         if on and not meal: active_ids.append(sid)
-
-    if st.session_state.scores and active_ids:
-        st.write("---")
-        st.markdown("### ⏭️ Siguientes 20 Turnos")
-        temp_scores = st.session_state.scores.copy()
-        simulated_turns = []
-        turn_counts = {}
-        for _ in range(20):
-            valid_candidates = {k: v for k, v in temp_scores.items() if k in active_ids}
-            if not valid_candidates: break
-            next_person = min(valid_candidates, key=valid_candidates.get)
-            simulated_turns.append(next_person)
-            turn_counts[next_person] = turn_counts.get(next_person, 0) + 1
-            temp_scores[next_person] += 1
-        st.markdown("".join([f'<span class="turn-pill">S{t}</span>' for t in simulated_turns]), unsafe_allow_html=True)
-        summary_html = '<div class="summary-box"><b>Distribución:</b><br>'
-        sorted_counts = sorted(turn_counts.items(), key=lambda x: x[1], reverse=True)
-        for sid, count in sorted_counts:
-            summary_html += f'<div class="summary-row"><span>Surtidor {sid}</span> <span>+{count} ped</span></div>'
-        summary_html += '</div>'
-        st.markdown(summary_html, unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
 st.title("📦💊 Panel de Productividad 💊📦")
@@ -95,44 +70,43 @@ else:
     h_in = ""
 
 if st.button(" ✳️ ACTUALIZAR PANEL"):
-    pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
     data_p, data_i = {}, {}
-
+    
     def clean_val(v):
-        if v is None or str(v).strip() in ["", "-"]: return 0
-        # Remove commas, then convert to float to handle potential decimals, then int
-        s = str(v).replace(',', '')
         try:
-            return int(float(s))
-        except:
-            return 0
+            if pd.isna(v) or str(v).strip() in ["", "-", "0"]: return 0
+            return int(float(str(v).replace(',', '')))
+        except: return 0
 
-    # 1. AUTO-FEED
+    # 1. AUTO-FEED (GOOGLE SHEETS)
     if not st.session_state.manual_mode:
         try:
             df_raw = pd.read_csv(SHEET_URL, header=None)
             for r in range(len(df_raw)):
                 for c in range(len(df_raw.columns)):
                     cell = str(df_raw.iloc[r, c]).strip()
-                    if cell.isdigit() and int(cell) in ALL_IDS:
+                    if cell.isdigit():
                         sid = int(cell)
-                        # Pedidos is 2 columns over, Piezas is 3 columns over
-                        data_p[sid] = data_p.get(sid, 0) + clean_val(df_raw.iloc[r, c + 2])
-                        data_i[sid] = data_i.get(sid, 0) + clean_val(df_raw.iloc[r, c + 3])
-        except: pass
+                        if sid in ALL_IDS:
+                            # Sum current row values to the running total for this ID
+                            data_p[sid] = data_p.get(sid, 0) + clean_val(df_raw.iloc[r, c + 2])
+                            data_i[sid] = data_i.get(sid, 0) + clean_val(df_raw.iloc[r, c + 3])
+        except Exception as e:
+            st.error(f"Error reading sheet: {e}")
 
-    # 2. PROCESS MANUAL TEXT INPUT
+    # 2. MANUAL FEED
     if st.session_state.manual_mode and h_in.strip():
+        pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
         matches = re.findall(pat, h_in)
         for sid_raw, _, ped, pza in matches:
             sid = int(sid_raw)
             data_p[sid] = data_p.get(sid, 0) + clean_val(ped)
             data_i[sid] = data_i.get(sid, 0) + clean_val(pza)
 
+    # FINAL COMPILE
     combined = []
     for sid in ALL_IDS:
-        p_val = data_p.get(sid, 0)
-        i_val = data_i.get(sid, 0)
+        p_val, i_val = data_p.get(sid, 0), data_i.get(sid, 0)
         if p_val > 0 or i_val > 0:
             combined.append({"ID": sid, "Surtidor": f"Surtidor {sid}", "Pedidos": p_val, "Piezas": i_val})
     
@@ -151,10 +125,7 @@ if st.session_state.final_ranking:
         fig.update_traces(textinfo='percent+label', textfont_size=14, marker=dict(line=dict(color='#17202A', width=2)))
         fig.update_layout(height=850, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
-        stdev_val = df['Pedidos'].std()
-        avg_val = df['Pedidos'].mean()
-        st.markdown(f'<div class="stats-container"><span style="font-size: 0.9rem; color: #BDC3C7;">Balance de Carga (Pedidos)</span><br><span style="font-size: 1.8rem; font-weight: bold; color: #FFFFFF;">σ {stdev_val:.2f}</span><br><span style="font-size: 0.8rem; color: #E74C3C;">Promedio: {avg_val:.1f}</span></div>', unsafe_allow_html=True)
-
+        st.markdown(f'<div class="stats-container"><span style="font-size: 0.9rem; color: #BDC3C7;">Balance de Carga (Pedidos)</span><br><span style="font-size: 1.8rem; font-weight: bold; color: #FFFFFF;">σ {df["Pedidos"].std():.2f}</span><br><span style="font-size: 0.8rem; color: #E74C3C;">Promedio: {df["Pedidos"].mean():.1f}</span></div>', unsafe_allow_html=True)
     with col_table:
         st.markdown("### 🏅 Ranking (IDs)")
         st.table(df[["Surtidor", "Pedidos", "Piezas"]])
