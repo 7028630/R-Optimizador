@@ -66,7 +66,7 @@ st.title("📦💊 Panel de Productividad 💊📦")
 if st.session_state.manual_mode:
     h_in = st.text_area("1. Histórico Acumulado (Pegar)", height=150)
 else:
-    st.info("🌐 Alimentando desde Google Sheets (Histórico)")
+    st.info("🌐 Alimentando desde Google Sheets (Multi-Tabla)")
     h_in = ""
 
 if st.button(" ✳️ ACTUALIZAR PANEL"):
@@ -74,27 +74,35 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     
     def clean_val(v):
         try:
-            if pd.isna(v) or str(v).strip() in ["", "-", "0"]: return 0
-            return int(float(str(v).replace(',', '')))
+            val_str = str(v).strip().replace(',', '')
+            if val_str == "" or val_str == "-": return 0
+            return int(float(val_str))
         except: return 0
 
-    # 1. AUTO-FEED (GOOGLE SHEETS)
+    # 1. AUTO-FEED (GOOGLE SHEETS) - Scans across multiple tables (Columns B, H, N, etc.)
     if not st.session_state.manual_mode:
         try:
             df_raw = pd.read_csv(SHEET_URL, header=None)
-            for r in range(len(df_raw)):
-                for c in range(len(df_raw.columns)):
-                    cell = str(df_raw.iloc[r, c]).strip()
-                    if cell.isdigit():
-                        sid = int(cell)
+            rows, cols = df_raw.shape
+            
+            for r in range(rows):
+                for c in range(cols):
+                    cell_val = str(df_raw.iloc[r, c]).strip()
+                    # Check if cell is exactly an ID (to avoid catching totals or dates)
+                    if cell_val.isdigit():
+                        sid = int(cell_val)
                         if sid in ALL_IDS:
-                            # Sum current row values to the running total for this ID
-                            data_p[sid] = data_p.get(sid, 0) + clean_val(df_raw.iloc[r, c + 2])
-                            data_i[sid] = data_i.get(sid, 0) + clean_val(df_raw.iloc[r, c + 3])
+                            # Pedidos is 2 columns to the right of the ID
+                            # Piezas is 3 columns to the right of the ID
+                            if c + 3 < cols:
+                                p_val = clean_val(df_raw.iloc[r, c + 2])
+                                i_val = clean_val(df_raw.iloc[r, c + 3])
+                                data_p[sid] = data_p.get(sid, 0) + p_val
+                                data_i[sid] = data_i.get(sid, 0) + i_val
         except Exception as e:
             st.error(f"Error reading sheet: {e}")
 
-    # 2. MANUAL FEED
+    # 2. MANUAL FEED (Keep logic for legacy support)
     if st.session_state.manual_mode and h_in.strip():
         pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
         matches = re.findall(pat, h_in)
