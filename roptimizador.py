@@ -42,7 +42,6 @@ if 'manual_mode' not in st.session_state: st.session_state.manual_mode = False
 with st.sidebar:
     st.markdown("## ✅Asistencia/Comida🍱")
     
-    # Toggle for Manual Paste
     if st.button("⌨️ MODO MANUAL (PEGAR)" if not st.session_state.manual_mode else "🌐 MODO AUTO (SHEET)"):
         st.session_state.manual_mode = not st.session_state.manual_mode
         st.rerun()
@@ -89,7 +88,6 @@ with st.sidebar:
 # --- MAIN CONTENT ---
 st.title("📦💊 Panel de Productividad 💊📦")
 
-# Input Section
 if st.session_state.manual_mode:
     h_in = st.text_area("1. Histórico Acumulado (Pegar)", height=150)
 else:
@@ -101,11 +99,15 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     data_p, data_i = {}, {}
 
     def clean_val(v):
-        if not v or '-' in str(v) or str(v).strip() == "": return 0
-        s = str(v).replace(',', '').replace('.', '')
-        return int(s) if s.isdigit() else 0
+        if v is None or str(v).strip() in ["", "-"]: return 0
+        # Remove commas, then convert to float to handle potential decimals, then int
+        s = str(v).replace(',', '')
+        try:
+            return int(float(s))
+        except:
+            return 0
 
-    # 1. AUTO-FEED (Only if manual mode is OFF)
+    # 1. AUTO-FEED
     if not st.session_state.manual_mode:
         try:
             df_raw = pd.read_csv(SHEET_URL, header=None)
@@ -114,13 +116,12 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
                     cell = str(df_raw.iloc[r, c]).strip()
                     if cell.isdigit() and int(cell) in ALL_IDS:
                         sid = int(cell)
-                        try:
-                            data_p[sid] = data_p.get(sid, 0) + clean_val(df_raw.iloc[r, c + 2])
-                            data_i[sid] = data_i.get(sid, 0) + clean_val(df_raw.iloc[r, c + 3])
-                        except: continue
+                        # Pedidos is 2 columns over, Piezas is 3 columns over
+                        data_p[sid] = data_p.get(sid, 0) + clean_val(df_raw.iloc[r, c + 2])
+                        data_i[sid] = data_i.get(sid, 0) + clean_val(df_raw.iloc[r, c + 3])
         except: pass
 
-    # 2. PROCESS MANUAL TEXT INPUT (Historical Only)
+    # 2. PROCESS MANUAL TEXT INPUT
     if st.session_state.manual_mode and h_in.strip():
         matches = re.findall(pat, h_in)
         for sid_raw, _, ped, pza in matches:
@@ -129,9 +130,11 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
             data_i[sid] = data_i.get(sid, 0) + clean_val(pza)
 
     combined = []
-    for sid, peds in data_p.items():
-        if peds > 0 or data_i.get(sid, 0) > 0:
-            combined.append({"ID": sid, "Surtidor": f"Surtidor {sid}", "Pedidos": peds, "Piezas": data_i.get(sid, 0)})
+    for sid in ALL_IDS:
+        p_val = data_p.get(sid, 0)
+        i_val = data_i.get(sid, 0)
+        if p_val > 0 or i_val > 0:
+            combined.append({"ID": sid, "Surtidor": f"Surtidor {sid}", "Pedidos": p_val, "Piezas": i_val})
     
     st.session_state.final_ranking = sorted(combined, key=lambda x: x['Pedidos'], reverse=True)
     st.session_state.scores = {sid: data_p.get(sid, 0) for sid in ALL_IDS}
