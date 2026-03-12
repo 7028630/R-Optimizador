@@ -29,7 +29,7 @@ st.markdown("""
     .turn-pill { background: #C0392B; color: white !important; padding: 2px 8px; border-radius: 10px; margin: 2px; display: inline-block; font-size: 0.8rem; font-weight: bold; }
     .summary-box { background-color: #212F3C; padding: 10px; border-radius: 8px; border-left: 4px solid #C0392B; margin-top: 10px; }
     .summary-row { display: flex; justify-content: space-between; font-size: 0.85rem; border-bottom: 1px solid #2C3E50; padding: 2px 0; }
-    div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; }
+    div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; }
     .stats-container { background-color: #212F3C; padding: 15px; border-radius: 10px; border: 1px solid #C0392B; text-align: center; margin-top: -20px; }
     </style>
 """, unsafe_allow_html=True)
@@ -37,6 +37,7 @@ st.markdown("""
 if 'final_ranking' not in st.session_state: st.session_state.final_ranking = []
 if 'scores' not in st.session_state: st.session_state.scores = {}
 if 'manual_mode' not in st.session_state: st.session_state.manual_mode = False
+if 'show_turns' not in st.session_state: st.session_state.show_turns = False
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -47,6 +48,7 @@ with st.sidebar:
     if st.button("🔄 REINICIAR TODO"): 
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
+    
     active_ids = []
     st.write("---")
     h1, h2, h3 = st.columns([2, 1, 1])
@@ -60,6 +62,30 @@ with st.sidebar:
         with col3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
         if on and not meal: active_ids.append(sid)
 
+    st.write("---")
+    if st.button("🚀 GENERAR TURNOS"):
+        st.session_state.show_turns = True
+
+    if st.session_state.show_turns and st.session_state.scores and active_ids:
+        st.markdown("### ⏭️ Siguientes 20 Turnos")
+        temp_scores = st.session_state.scores.copy()
+        simulated_turns = []
+        turn_counts = {}
+        for _ in range(20):
+            valid_candidates = {k: v for k, v in temp_scores.items() if k in active_ids}
+            if not valid_candidates: break
+            next_person = min(valid_candidates, key=valid_candidates.get)
+            simulated_turns.append(next_person)
+            turn_counts[next_person] = turn_counts.get(next_person, 0) + 1
+            temp_scores[next_person] += 1
+        st.markdown("".join([f'<span class="turn-pill">S{t}</span>' for t in simulated_turns]), unsafe_allow_html=True)
+        summary_html = '<div class="summary-box"><b>Distribución:</b><br>'
+        sorted_counts = sorted(turn_counts.items(), key=lambda x: x[1], reverse=True)
+        for sid, count in sorted_counts:
+            summary_html += f'<div class="summary-row"><span>Surtidor {sid}</span> <span>+{count} ped</span></div>'
+        summary_html += '</div>'
+        st.markdown(summary_html, unsafe_allow_html=True)
+
 # --- MAIN CONTENT ---
 st.title("📦💊 Panel de Productividad 💊📦")
 
@@ -71,7 +97,6 @@ else:
 
 if st.button(" ✳️ ACTUALIZAR PANEL"):
     data_p, data_i = {}, {}
-    
     def clean_val(v):
         try:
             val_str = str(v).strip().replace(',', '')
@@ -79,30 +104,23 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
             return int(float(val_str))
         except: return 0
 
-    # 1. AUTO-FEED (GOOGLE SHEETS) - Scans across multiple tables (Columns B, H, N, etc.)
     if not st.session_state.manual_mode:
         try:
             df_raw = pd.read_csv(SHEET_URL, header=None)
             rows, cols = df_raw.shape
-            
             for r in range(rows):
                 for c in range(cols):
                     cell_val = str(df_raw.iloc[r, c]).strip()
-                    # Check if cell is exactly an ID (to avoid catching totals or dates)
                     if cell_val.isdigit():
                         sid = int(cell_val)
                         if sid in ALL_IDS:
-                            # Pedidos is 2 columns to the right of the ID
-                            # Piezas is 3 columns to the right of the ID
                             if c + 3 < cols:
                                 p_val = clean_val(df_raw.iloc[r, c + 2])
                                 i_val = clean_val(df_raw.iloc[r, c + 3])
                                 data_p[sid] = data_p.get(sid, 0) + p_val
                                 data_i[sid] = data_i.get(sid, 0) + i_val
-        except Exception as e:
-            st.error(f"Error reading sheet: {e}")
+        except: pass
 
-    # 2. MANUAL FEED (Keep logic for legacy support)
     if st.session_state.manual_mode and h_in.strip():
         pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
         matches = re.findall(pat, h_in)
@@ -111,7 +129,6 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
             data_p[sid] = data_p.get(sid, 0) + clean_val(ped)
             data_i[sid] = data_i.get(sid, 0) + clean_val(pza)
 
-    # FINAL COMPILE
     combined = []
     for sid in ALL_IDS:
         p_val, i_val = data_p.get(sid, 0), data_i.get(sid, 0)
@@ -120,6 +137,7 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     
     st.session_state.final_ranking = sorted(combined, key=lambda x: x['Pedidos'], reverse=True)
     st.session_state.scores = {sid: data_p.get(sid, 0) for sid in ALL_IDS}
+    st.session_state.show_turns = False
     st.rerun()
 
 # --- VISUALS ---
