@@ -92,7 +92,7 @@ st.title("📦💊 Panel de Productividad 💊📦")
 if st.session_state.manual_mode:
     h_in = st.text_area("1. Histórico Acumulado (Pegar)", height=150)
 else:
-    st.info("🌐 Alimentando desde Google Sheets (Column E Start)")
+    st.info("🌐 Alimentando desde Google Sheets")
     h_in = ""
 
 if st.button(" ✳️ ACTUALIZAR PANEL"):
