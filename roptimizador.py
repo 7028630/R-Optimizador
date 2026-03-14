@@ -92,7 +92,7 @@ st.title("📦💊 Panel de Productividad 💊📦")
 if st.session_state.manual_mode:
     h_in = st.text_area("1. Histórico Acumulado (Pegar)", height=150)
 else:
-    st.info("🌐 Alimentando desde Google Sheets (Multi-Tabla)")
+    st.info("🌐 Alimentando desde Google Sheets (Column E Start)")
     h_in = ""
 
 if st.button(" ✳️ ACTUALIZAR PANEL"):
@@ -108,8 +108,9 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
         try:
             df_raw = pd.read_csv(SHEET_URL, header=None)
             rows, cols = df_raw.shape
+            # Start scanning from index 4 (Column E)
             for r in range(rows):
-                for c in range(cols):
+                for c in range(4, cols):
                     cell_val = str(df_raw.iloc[r, c]).strip()
                     if cell_val.isdigit():
                         sid = int(cell_val)
