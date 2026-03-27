@@ -120,4 +120,62 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
                             temp_abs[sid].append(date_val)
                             
         for sid, dates in temp_abs.items():
-            abs_data.append({"Surtidor": f"Surtidor {sid}", "ID": sid, "Count":
+            abs_data.append({"Surtidor": f"Surtidor {sid}", "ID": sid, "Count": len(dates), "Dates": dates})
+                            
+    except Exception as e:
+        st.error(f"Error: {e}")
+
+    ranking_list = []
+    for s in range(1, sidebar_limit + 1):
+        ranking_list.append({"ID": s, "Surtidor": f"Surtidor {s}", "Pedidos": data_p.get(s,0), "Piezas": data_i.get(s,0)})
+    
+    st.session_state.final_ranking = sorted(ranking_list, key=lambda x: x['Pedidos'], reverse=True)
+    st.session_state.scores = {s: data_p.get(s, 0) for s in ALL_IDS}
+    st.session_state.abs_list = abs_data
+    st.rerun()
+
+# --- VISUALS ---
+if st.session_state.final_ranking:
+    full_df = pd.DataFrame(st.session_state.final_ranking)
+    df_active = full_df[full_df['Pedidos'] > 0].copy()
+    
+    col_chart, col_table = st.columns([1, 1])
+    with col_chart:
+        fig = px.pie(df_active, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
+        fig.update_layout(height=350, showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
+    with col_table:
+        st.markdown("### 🏅 Ranking")
+        st.table(df_active[["Surtidor", "Pedidos", "Piezas"]])
+
+    # --- AUSENCIAS SECTION ---
+    st.write("---")
+    st.markdown("### ⚠️ AUSENCIAS")
+    
+    filter_input = st.text_input("Filtro (ID o 'T' para ausentes):", key="abs_filter").strip().upper()
+    
+    filtered_abs = []
+    total_abs_count = 0
+    
+    for item in st.session_state.abs_list:
+        show_item = False
+        if filter_input == "T":
+            if item['Count'] > 0: show_item = True
+        elif filter_input == "":
+            show_item = True
+        elif filter_input.isdigit() and int(filter_input) == item['ID']:
+            show_item = True
+            
+        if show_item:
+            filtered_abs.append(item)
+            total_abs_count += item['Count']
+
+    # Final HTML Table Construction
+    rows_html = ""
+    for item in filtered_abs:
+        dates_str = " | ".join(item['Dates']) if item['Dates'] else "Sin fechas"
+        rows_html += f"<tr><td>{item['Surtidor']}</td><td><span class='date-tooltip' title='{dates_str}'>{item['Count']} días</span></td></tr>"
+
+    table_content = f"""<div class="abs-container"><h4 style="margin:0 0 10px 0;">Inasistencias en vista: {total_abs_count}</h4><table class="custom-table"><thead><tr><th>Surtidor</th><th>Cero Pedidos (Hover para fechas)</th></tr></thead><tbody>{rows_html if rows_html else "<tr><td colspan='2'>No hay coincidencias</td></tr>"}</tbody></table></div>"""
+    
+    st.markdown(table_content, unsafe_allow_html=True)
