@@ -5,7 +5,6 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 ALL_IDS = list(range(1, 22)) 
-HUMAN_IDS = list(range(1, 15)) # Strictly 1-14
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv"
 
 # --- UI STYLE ---
@@ -28,8 +27,11 @@ st.markdown("""
     .turn-pill { background: #C0392B; color: white !important; padding: 2px 8px; border-radius: 10px; margin: 2px; display: inline-block; font-size: 0.8rem; font-weight: bold; }
     div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; border: none; }
     
-    /* Hover tooltip style */
     .date-tooltip { cursor: help; border-bottom: 2px dotted #E74C3C; color: #E74C3C; font-weight: bold; padding: 2px 5px; }
+    
+    /* Shrink the numeric input boxes */
+    div[data-testid="stNumberInput"] { width: 100px !important; }
+    div[data-testid="stTextInput"] { width: 150px !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -41,6 +43,11 @@ if 'show_turns' not in st.session_state: st.session_state.show_turns = False
 
 # --- SIDEBAR ---
 with st.sidebar:
+    st.markdown("## ⚙️ Configuración")
+    # Space to define the limit of visible surtidores
+    sidebar_limit = st.number_input("Mostrar hasta ID:", min_value=1, max_value=21, value=14)
+    
+    st.write("---")
     st.markdown("## ✅Asistencia/Comida🍱")
     if st.button("⌨️ MODO MANUAL" if not st.session_state.manual_mode else "🌐 MODO AUTO"):
         st.session_state.manual_mode = not st.session_state.manual_mode
@@ -54,17 +61,17 @@ with st.sidebar:
     c3.markdown("🍴")
 
     for sid in ALL_IDS:
-        # ONLY show toggle for Human IDs (1-14)
-        if sid in HUMAN_IDS:
+        # Only render UI up to the requested limit
+        if sid <= sidebar_limit:
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1: st.markdown(f"**Surtidor {sid}**")
             with col2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
             with col3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
             if on and not meal: active_ids.append(sid)
         else:
-            # Maintain state keys for 15-21 but don't render UI
-            st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
-            st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
+            # Maintain hidden state for IDs beyond limit
+            st.session_state[f"on_{sid}"] = True
+            st.session_state[f"m_{sid}"] = False
 
     st.write("---")
     btn_label = "👁️ OCULTAR TURNOS" if st.session_state.show_turns else "🚀 GENERAR TURNOS"
@@ -73,7 +80,7 @@ with st.sidebar:
         st.rerun()
 
     if st.session_state.show_turns and st.session_state.scores and active_ids:
-        st.markdown("### ⏭️ Siguientes 20 Turnos")
+        st.markdown("### ⏭️ Turnos")
         temp_scores = st.session_state.scores.copy()
         simulated_turns = []
         for _ in range(20):
@@ -100,8 +107,7 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     try:
         df_raw = pd.read_csv(SHEET_URL, header=None)
         rows, cols = df_raw.shape
-        # Temporary storage to group dates per surtidor for the table
-        temp_abs = {sid: [] for sid in HUMAN_IDS}
+        temp_abs = {sid: [] for sid in range(1, sidebar_limit + 1)}
 
         for r in range(rows):
             for c in range(cols):
@@ -114,12 +120,10 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
                         data_p[sid] = data_p.get(sid, 0) + p_val
                         data_i[sid] = data_i.get(sid, 0) + i_val
                         
-                        # Absence Tracking for 1-14
-                        if sid in HUMAN_IDS and p_val == 0:
+                        if sid <= sidebar_limit and p_val == 0:
                             date_val = str(df_raw.iloc[r, 5]).strip() if cols > 5 else "Fecha N/A"
                             temp_abs[sid].append(date_val)
                             
-        # Flatten temp_abs into a list for easier filtering later
         for sid, dates in temp_abs.items():
             abs_data.append({"Surtidor": f"Surtidor {sid}", "ID": sid, "Count": len(dates), "Dates": dates})
                             
@@ -147,18 +151,29 @@ if st.session_state.final_ranking:
 
     # --- AUSENCIAS SECTION ---
     st.write("---")
-    st.markdown("### ⚠️ AUSENCIAS (Surtidores 1-14)")
+    st.markdown("### ⚠️ AUSENCIAS")
     
-    # FILTER BAR
-    search_query = st.text_input("🔍 Filtrar por Surtidor o Fecha:", placeholder="Ej: 14 o 25/03...")
+    # Tiny plain text filter for Surtidor ID or "T"
+    filter_input = st.text_input("Filtro (ID o 'T' para ausentes):", key="abs_filter").strip().upper()
     
     filtered_abs = []
     total_abs_count = 0
     
     for item in st.session_state.abs_list:
-        dates_str = " | ".join(item['Dates'])
-        # Check if query matches surtidor name or any date in the list
-        if search_query.lower() in item['Surtidor'].lower() or search_query.lower() in dates_str.lower():
+        show_item = False
+        
+        # If "T", show only those with Count > 0
+        if filter_input == "T":
+            if item['Count'] > 0:
+                show_item = True
+        # If empty, show all up to sidebar limit
+        elif filter_input == "":
+            show_item = True
+        # If ID matches number input
+        elif filter_input.isdigit() and int(filter_input) == item['ID']:
+            show_item = True
+            
+        if show_item:
             filtered_abs.append(item)
             total_abs_count += item['Count']
 
@@ -174,16 +189,16 @@ if st.session_state.final_ranking:
     
     st.markdown(f"""
     <div style="background-color: #212F3C; padding: 20px; border-radius: 10px; border-left: 5px solid #C0392B;">
-        <h4 style="margin-top:0;">Inasistencias detectadas: {total_abs_count}</h4>
+        <h4 style="margin-top:0;">Inasistencias en vista: {total_abs_count}</h4>
         <table class="custom-table">
             <thead>
                 <tr>
                     <th>Surtidor</th>
-                    <th>Días con 0 Pedidos (Pasa el mouse para ver fechas)</th>
+                    <th>Cero Pedidos (Hover para fechas)</th>
                 </tr>
             </thead>
             <tbody>
-                {abs_rows_html if filtered_abs else '<tr><td colspan="2">No se encontraron resultados.</td></tr>'}
+                {abs_rows_html if filtered_abs else '<tr><td colspan="2">No hay coincidencias.</td></tr>'}
             </tbody>
         </table>
     </div>
