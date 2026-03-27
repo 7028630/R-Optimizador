@@ -20,7 +20,7 @@ st.markdown("""
     header, [data-testid="stHeader"] { background-color: #17202A !important; }
     [data-testid="stSidebar"] { background-color: #111821 !important; }
     
-    .custom-table { color: #FFFFFF !important; width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .custom-table { color: #FFFFFF !important; width: 100%; border-collapse: collapse; margin-top: 10px; background-color: transparent; }
     .custom-table thead tr th { color: #FFFFFF !important; background-color: #212F3C !important; border-bottom: 2px solid #C0392B !important; padding: 12px; text-align: left; }
     .custom-table tbody tr td { color: #FFFFFF !important; border-bottom: 1px solid #2C3E50 !important; padding: 10px; }
     
@@ -29,7 +29,6 @@ st.markdown("""
     
     .date-tooltip { cursor: help; border-bottom: 2px dotted #E74C3C; color: #E74C3C; font-weight: bold; padding: 2px 5px; }
     
-    /* Shrink the numeric input boxes */
     div[data-testid="stNumberInput"] { width: 100px !important; }
     div[data-testid="stTextInput"] { width: 150px !important; }
     </style>
@@ -44,7 +43,6 @@ if 'show_turns' not in st.session_state: st.session_state.show_turns = False
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("## ⚙️ Configuración")
-    # Space to define the limit of visible surtidores
     sidebar_limit = st.number_input("Mostrar hasta ID:", min_value=1, max_value=21, value=14)
     
     st.write("---")
@@ -61,7 +59,6 @@ with st.sidebar:
     c3.markdown("🍴")
 
     for sid in ALL_IDS:
-        # Only render UI up to the requested limit
         if sid <= sidebar_limit:
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1: st.markdown(f"**Surtidor {sid}**")
@@ -69,7 +66,7 @@ with st.sidebar:
             with col3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
             if on and not meal: active_ids.append(sid)
         else:
-            # Maintain hidden state for IDs beyond limit
+            # Silent state for hidden IDs
             st.session_state[f"on_{sid}"] = True
             st.session_state[f"m_{sid}"] = False
 
@@ -107,6 +104,7 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     try:
         df_raw = pd.read_csv(SHEET_URL, header=None)
         rows, cols = df_raw.shape
+        # Tracking absences for the current visible range
         temp_abs = {sid: [] for sid in range(1, sidebar_limit + 1)}
 
         for r in range(rows):
@@ -130,7 +128,12 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     except Exception as e:
         st.error(f"Error: {e}")
 
-    st.session_state.final_ranking = sorted([{"ID": s, "Surtidor": f"Surtidor {s}", "Pedidos": data_p.get(s,0), "Piezas": data_i.get(s,0)} for s in ALL_IDS], key=lambda x: x['Pedidos'], reverse=True)
+    # Sorting logic: Show only up to limit in the ranking too
+    ranking_list = []
+    for s in range(1, sidebar_limit + 1):
+        ranking_list.append({"ID": s, "Surtidor": f"Surtidor {s}", "Pedidos": data_p.get(s,0), "Piezas": data_i.get(s,0)})
+    
+    st.session_state.final_ranking = sorted(ranking_list, key=lambda x: x['Pedidos'], reverse=True)
     st.session_state.scores = {s: data_p.get(s, 0) for s in ALL_IDS}
     st.session_state.abs_list = abs_data
     st.rerun()
@@ -153,7 +156,6 @@ if st.session_state.final_ranking:
     st.write("---")
     st.markdown("### ⚠️ AUSENCIAS")
     
-    # Tiny plain text filter for Surtidor ID or "T"
     filter_input = st.text_input("Filtro (ID o 'T' para ausentes):", key="abs_filter").strip().upper()
     
     filtered_abs = []
@@ -161,15 +163,10 @@ if st.session_state.final_ranking:
     
     for item in st.session_state.abs_list:
         show_item = False
-        
-        # If "T", show only those with Count > 0
         if filter_input == "T":
-            if item['Count'] > 0:
-                show_item = True
-        # If empty, show all up to sidebar limit
+            if item['Count'] > 0: show_item = True
         elif filter_input == "":
             show_item = True
-        # If ID matches number input
         elif filter_input.isdigit() and int(filter_input) == item['ID']:
             show_item = True
             
@@ -187,9 +184,10 @@ if st.session_state.final_ranking:
             </tr>
         """
     
+    # CRITICAL FIX: The entire block below is now in one st.markdown call
     st.markdown(f"""
     <div style="background-color: #212F3C; padding: 20px; border-radius: 10px; border-left: 5px solid #C0392B;">
-        <h4 style="margin-top:0;">Inasistencias en vista: {total_abs_count}</h4>
+        <h4 style="margin-top:0; color: white;">Inasistencias en vista: {total_abs_count}</h4>
         <table class="custom-table">
             <thead>
                 <tr>
