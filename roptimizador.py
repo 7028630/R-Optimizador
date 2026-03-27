@@ -5,12 +5,12 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 ALL_IDS = list(range(1, 22)) 
+HUMAN_IDS = list(range(1, 15))  # IDs 1 through 14
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv"
 
 # --- UI STYLE ---
 st.set_page_config(page_title="Productividad Surtido", layout="wide")
 
-# Modified CSS to handle the sidebar toggle and general styling
 st.markdown("""
     <style>
     html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3, span, label, th, td {
@@ -20,7 +20,6 @@ st.markdown("""
     .stApp { background-color: #17202A; }
     header, [data-testid="stHeader"] { background-color: #17202A !important; }
     
-    /* Re-enabling the sidebar collapse button */
     [data-testid="stSidebar"] { background-color: #111821 !important; }
     
     .lunch-label { font-size: 1.2rem !important; display: inline-block !important; visibility: visible !important; }
@@ -31,7 +30,7 @@ st.markdown("""
     .summary-box { background-color: #212F3C; padding: 10px; border-radius: 8px; border-left: 4px solid #C0392B; margin-top: 10px; }
     .summary-row { display: flex; justify-content: space-between; font-size: 0.85rem; border-bottom: 1px solid #2C3E50; padding: 2px 0; }
     div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; }
-    .absence-box { background-color: #7B241C; padding: 10px; border-radius: 8px; border-left: 4px solid #E74C3C; margin-top: 10px; }
+    .absence-box { background-color: #7B241C; padding: 15px; border-radius: 8px; border-left: 5px solid #E74C3C; margin-top: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -61,7 +60,9 @@ with st.sidebar:
         with col1: st.markdown(f"**Surtidor {sid}**")
         with col2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
         with col3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
-        if on and not meal: active_ids.append(sid)
+        # Only include in Turn generation if it's a Human ID (1-14)
+        if on and not meal and sid in HUMAN_IDS: 
+            active_ids.append(sid)
 
     st.write("---")
     if st.button("🚀 GENERAR TURNOS"):
@@ -134,7 +135,6 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     combined = []
     for sid in ALL_IDS:
         p_val, i_val = data_p.get(sid, 0), data_i.get(sid, 0)
-        # We include all records to identify those with 0 orders later
         combined.append({"ID": sid, "Surtidor": f"Surtidor {sid}", "Pedidos": p_val, "Piezas": i_val})
     
     st.session_state.final_ranking = sorted(combined, key=lambda x: x['Pedidos'], reverse=True)
@@ -146,7 +146,6 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
 if st.session_state.final_ranking:
     st.write("---")
     full_df = pd.DataFrame(st.session_state.final_ranking)
-    # Filter only those with work for the Ranking table and Pie chart
     df_active = full_df[full_df['Pedidos'] > 0].copy()
     df_active.index = range(1, len(df_active) + 1)
     
@@ -154,24 +153,22 @@ if st.session_state.final_ranking:
     
     with col_chart:
         fig = px.pie(df_active, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
-        fig.update_traces(textinfo='percent+label', textfont_size=12, marker=dict(line=dict(color='#17202A', width=2)))
-        # Reduced height to make the chart smaller
-        fig.update_layout(height=400, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(t=10, b=10, l=10, r=10))
+        fig.update_traces(textinfo='percent+label', textfont_size=11, marker=dict(line=dict(color='#17202A', width=2)))
+        fig.update_layout(height=450, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
         
     with col_table:
         st.markdown("### 🏅 Ranking (IDs)")
         st.table(df_active[["Surtidor", "Pedidos", "Piezas"]])
 
+    # --- AUSENCIAS ---
     st.write("---")
-    # AUSENCIAS Section
     st.markdown("### ⚠️ AUSENCIAS")
-    absent_surtidores = full_df[full_df['Pedidos'] == 0]['Surtidor'].tolist()
+    # Only report absences for HUMAN_IDS (1-14)
+    absent_surtidores = full_df[(full_df['Pedidos'] == 0) & (full_df['ID'].isin(HUMAN_IDS))]['Surtidor'].tolist()
     
     if absent_surtidores:
         absence_list = ", ".join(absent_surtidores)
-        st.markdown(f'<div class="absence-box"><b>Surtidores sin pedidos hoy:</b><br>{absence_list}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="absence-box"><b>Surtidores (1-14) sin pedidos registrados hoy:</b><br>{absence_list}</div>', unsafe_allow_html=True)
     else:
-        st.success("Asistencia completa: Todos los surtidores tienen pedidos registrados.")
-
-Would you like me to adjust the "AUSENCIAS" logic to only look for specific IDs instead of checking all 21?
+        st.success("Asistencia completa para surtidores del 1 al 14.")
