@@ -5,12 +5,12 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 ALL_IDS = list(range(1, 22)) 
-# This URL defaults to the FIRST TAB (index 0) of the spreadsheet
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv"
 
 # --- UI STYLE ---
 st.set_page_config(page_title="Productividad Surtido", layout="wide")
 
+# Modified CSS to handle the sidebar toggle and general styling
 st.markdown("""
     <style>
     html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3, span, label, th, td {
@@ -19,10 +19,10 @@ st.markdown("""
     }
     .stApp { background-color: #17202A; }
     header, [data-testid="stHeader"] { background-color: #17202A !important; }
-    [data-testid="stSidebar"] { background-color: #111821 !important; min-width: 320px !important; }
-    [data-testid="stSidebarNav"] + div, button[title="Collapse sidebar"], [data-testid="collapsedControl"] {
-        display: none !important; visibility: hidden !important;
-    }
+    
+    /* Re-enabling the sidebar collapse button */
+    [data-testid="stSidebar"] { background-color: #111821 !important; }
+    
     .lunch-label { font-size: 1.2rem !important; display: inline-block !important; visibility: visible !important; }
     table { color: #FFFFFF !important; width: 100%; border-collapse: collapse; }
     thead tr th { color: #FFFFFF !important; background-color: #212F3C !important; border-bottom: 2px solid #C0392B !important; }
@@ -31,7 +31,7 @@ st.markdown("""
     .summary-box { background-color: #212F3C; padding: 10px; border-radius: 8px; border-left: 4px solid #C0392B; margin-top: 10px; }
     .summary-row { display: flex; justify-content: space-between; font-size: 0.85rem; border-bottom: 1px solid #2C3E50; padding: 2px 0; }
     div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; }
-    .stats-container { background-color: #212F3C; padding: 15px; border-radius: 10px; border: 1px solid #C0392B; text-align: center; margin-top: -20px; }
+    .absence-box { background-color: #7B241C; padding: 10px; border-radius: 8px; border-left: 4px solid #E74C3C; margin-top: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -43,7 +43,7 @@ if 'show_turns' not in st.session_state: st.session_state.show_turns = False
 # --- SIDEBAR ---
 with st.sidebar:
     st.markdown("## ✅Asistencia/Comida🍱")
-    if st.button("⌨️ MODO MANUAL (PEGAR)" if not st.session_state.manual_mode else "🌐 MODO AUTO (SHEET)"):
+    if st.button("⌨️ MODO MANUAL" if not st.session_state.manual_mode else "🌐 MODO AUTO"):
         st.session_state.manual_mode = not st.session_state.manual_mode
         st.rerun()
     if st.button("🔄 REINICIAR TODO"): 
@@ -88,7 +88,7 @@ with st.sidebar:
         st.markdown(summary_html, unsafe_allow_html=True)
 
 # --- MAIN CONTENT ---
-st.title("📦💊 Panel de Productividad 💊📦")
+st.title("📦 Panel de Productividad")
 
 if st.session_state.manual_mode:
     h_in = st.text_area("1. Histórico Acumulado (Pegar)", height=150)
@@ -107,11 +107,8 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
 
     if not st.session_state.manual_mode:
         try:
-            # Reads the first sheet in the book
             df_raw = pd.read_csv(SHEET_URL, header=None)
             rows, cols = df_raw.shape
-            
-            # Scanning logic: Look for IDs in any column and grab Peds/Pzas
             for r in range(rows):
                 for c in range(cols):
                     cell_val = str(df_raw.iloc[r, c]).strip()
@@ -124,7 +121,7 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
                                 data_p[sid] = data_p.get(sid, 0) + p_val
                                 data_i[sid] = data_i.get(sid, 0) + i_val
         except Exception as e:
-            st.error(f"Error de conexión con Google Sheets: {e}")
+            st.error(f"Error de conexión: {e}")
 
     if st.session_state.manual_mode and h_in.strip():
         pat = r"(\d+)\s+([A-Za-z\s\.\-_]+|[0\s\-]+)?\s*([\d\.,]+)\s+([\d\.,\-]+)"
@@ -137,8 +134,8 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     combined = []
     for sid in ALL_IDS:
         p_val, i_val = data_p.get(sid, 0), data_i.get(sid, 0)
-        if p_val > 0 or i_val > 0:
-            combined.append({"ID": sid, "Surtidor": f"Surtidor {sid}", "Pedidos": p_val, "Piezas": i_val})
+        # We include all records to identify those with 0 orders later
+        combined.append({"ID": sid, "Surtidor": f"Surtidor {sid}", "Pedidos": p_val, "Piezas": i_val})
     
     st.session_state.final_ranking = sorted(combined, key=lambda x: x['Pedidos'], reverse=True)
     st.session_state.scores = {sid: data_p.get(sid, 0) for sid in ALL_IDS}
@@ -148,19 +145,33 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
 # --- VISUALS ---
 if st.session_state.final_ranking:
     st.write("---")
-    df = pd.DataFrame(st.session_state.final_ranking)
-    df.index = range(1, len(df) + 1)
-    col_chart, col_table = st.columns([1.3, 0.7])
+    full_df = pd.DataFrame(st.session_state.final_ranking)
+    # Filter only those with work for the Ranking table and Pie chart
+    df_active = full_df[full_df['Pedidos'] > 0].copy()
+    df_active.index = range(1, len(df_active) + 1)
+    
+    col_chart, col_table = st.columns([1, 1])
+    
     with col_chart:
-        fig = px.pie(df, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
-        fig.update_traces(textinfo='percent+label', textfont_size=14, marker=dict(line=dict(color='#17202A', width=2)))
-        fig.update_layout(height=850, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(t=10, b=10, l=10, r=10))
+        fig = px.pie(df_active, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
+        fig.update_traces(textinfo='percent+label', textfont_size=12, marker=dict(line=dict(color='#17202A', width=2)))
+        # Reduced height to make the chart smaller
+        fig.update_layout(height=400, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
-        st.markdown(f'<div class="stats-container"><span style="font-size: 0.9rem; color: #BDC3C7;">Balance de Carga (Pedidos)</span><br><span style="font-size: 1.8rem; font-weight: bold; color: #FFFFFF;">σ {df["Pedidos"].std():.2f}</span><br><span style="font-size: 0.8rem; color: #E74C3C;">Promedio: {df["Pedidos"].mean():.1f}</span></div>', unsafe_allow_html=True)
+        
     with col_table:
         st.markdown("### 🏅 Ranking (IDs)")
-        st.table(df[["Surtidor", "Pedidos", "Piezas"]])
-        st.markdown("### ⚡ Eficiencia")
-        df_eff = df.copy()
-        df_eff['P/Hr'] = (df_eff['Pedidos'] / 8).round(1)
-        st.table(df_eff[['Surtidor', 'P/Hr']])
+        st.table(df_active[["Surtidor", "Pedidos", "Piezas"]])
+
+    st.write("---")
+    # AUSENCIAS Section
+    st.markdown("### ⚠️ AUSENCIAS")
+    absent_surtidores = full_df[full_df['Pedidos'] == 0]['Surtidor'].tolist()
+    
+    if absent_surtidores:
+        absence_list = ", ".join(absent_surtidores)
+        st.markdown(f'<div class="absence-box"><b>Surtidores sin pedidos hoy:</b><br>{absence_list}</div>', unsafe_allow_html=True)
+    else:
+        st.success("Asistencia completa: Todos los surtidores tienen pedidos registrados.")
+
+Would you like me to adjust the "AUSENCIAS" logic to only look for specific IDs instead of checking all 21?
