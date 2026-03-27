@@ -4,18 +4,17 @@ import pandas as pd
 import plotly.express as px
 
 # --- CONFIGURATION ---
-# We now strictly focus on IDs 1-14 as per your request
 HUMAN_IDS = list(range(1, 15)) 
-# URL for the specific "Ausencias" data tab (Gid 1115153798)
+# Tab-specific URL (gid=1115153798)
 ABSENCIAS_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv&gid=1115153798"
-# Main data URL
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv"
 
 # --- UI STYLE ---
-st.set_page_config(page_title="Productividad Surtido", layout="wide")
+st.set_page_config(page_title="Productividad Surtido", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
+    /* Global Styles */
     html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3, span, label, th, td {
         font-family: Arial, Helvetica, sans-serif !important;
         color: #FFFFFF !important;
@@ -24,9 +23,15 @@ st.markdown("""
     header, [data-testid="stHeader"] { background-color: #17202A !important; }
     [data-testid="stSidebar"] { background-color: #111821 !important; }
     
-    /* HIDE THE CODE-LIKE HOVER TOOLTIP ON SIDEBAR */
-    [data-testid="stSidebarCollapseButton"] {
+    /* FIX: REMOVE THE WHITE CODE-LIKE LETTERS (TOOLTIPS) ON HOVER */
+    div[data-testid="stSidebarCollapseButton"] button div {
         display: none !important;
+    }
+    div[data-testid="stSidebarCollapseButton"] button:after {
+        content: "Ocultar 👁️";
+        font-size: 14px;
+        color: white;
+        font-weight: bold;
     }
 
     .lunch-label { font-size: 1.2rem !important; display: inline-block !important; visibility: visible !important; }
@@ -45,14 +50,9 @@ if 'final_ranking' not in st.session_state: st.session_state.final_ranking = []
 if 'scores' not in st.session_state: st.session_state.scores = {}
 if 'manual_mode' not in st.session_state: st.session_state.manual_mode = False
 if 'show_turns' not in st.session_state: st.session_state.show_turns = False
-if 'sidebar_state' not in st.session_state: st.session_state.sidebar_state = "expanded"
 
 # --- SIDEBAR ---
 with st.sidebar:
-    # Custom Hide Button to replace the system one
-    if st.button("Ocultar 👁️"):
-        st.markdown('<style>div[data-testid="stSidebar"] { display:none; }</style>', unsafe_allow_html=True)
-
     st.markdown("## ✅Asistencia/Comida🍱")
     if st.button("⌨️ MODO MANUAL" if not st.session_state.manual_mode else "🌐 MODO AUTO"):
         st.session_state.manual_mode = not st.session_state.manual_mode
@@ -69,7 +69,7 @@ with st.sidebar:
     with h2: st.markdown("**On**")
     with h3: st.markdown('<span class="lunch-label">🍴</span>', unsafe_allow_html=True)
     
-    # Filtered to only HUMAN_IDS (1-14)
+    # Strictly IDs 1-14
     for sid in HUMAN_IDS:
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1: st.markdown(f"**Surtidor {sid}**")
@@ -80,7 +80,6 @@ with st.sidebar:
 
     st.write("---")
     
-    # Toggle button for the turns section
     btn_label = "👁️ OCULTAR TURNOS" if st.session_state.show_turns else "🚀 GENERAR TURNOS"
     if st.button(btn_label):
         st.session_state.show_turns = not st.session_state.show_turns
@@ -88,23 +87,20 @@ with st.sidebar:
 
     if st.session_state.show_turns and st.session_state.scores and active_ids:
         st.markdown("### ⏭️ Siguientes 20 Turnos")
-        temp_scores = st.session_state.scores.copy()
+        temp_scores = {k: v for k, v in st.session_state.scores.items() if k in active_ids}
         simulated_turns = []
         turn_counts = {}
         
         for _ in range(20):
-            # Only calculate turns for active human IDs (1-14)
-            valid_candidates = {k: v for k, v in temp_scores.items() if k in active_ids}
-            if not valid_candidates: break
-            next_person = min(valid_candidates, key=valid_candidates.get)
+            if not temp_scores: break
+            next_person = min(temp_scores, key=temp_scores.get)
             simulated_turns.append(next_person)
             turn_counts[next_person] = turn_counts.get(next_person, 0) + 1
             temp_scores[next_person] += 1
             
         st.markdown("".join([f'<span class="turn-pill">S{t}</span>' for t in simulated_turns]), unsafe_allow_html=True)
         summary_html = '<div class="summary-box"><b>Distribución:</b><br>'
-        sorted_counts = sorted(turn_counts.items(), key=lambda x: x[1], reverse=True)
-        for sid, count in sorted_counts:
+        for sid, count in sorted(turn_counts.items(), key=lambda x: x[1], reverse=True):
             summary_html += f'<div class="summary-row"><span>Surtidor {sid}</span> <span>+{count} ped</span></div>'
         summary_html += '</div>'
         st.markdown(summary_html, unsafe_allow_html=True)
@@ -112,97 +108,64 @@ with st.sidebar:
 # --- MAIN CONTENT ---
 st.title("📦 Panel de Productividad")
 
-if st.session_state.manual_mode:
-    h_in = st.text_area("1. Histórico Acumulado (Pegar)", height=150)
-else:
-    st.info("🌐 Alimentando desde la pestaña principal (Mes Actual)")
-    h_in = ""
+def clean_val(v):
+    try:
+        val_str = str(v).strip().replace(',', '')
+        if val_str in ["", "-", "nan", "None"]: return 0
+        return int(float(val_str))
+    except: return 0
 
 if st.button(" ✳️ ACTUALIZAR PANEL"):
     data_p, data_i = {}, {}
-    def clean_val(v):
-        try:
-            val_str = str(v).strip().replace(',', '')
-            if val_str == "" or val_str == "-" or val_str == "nan": return 0
-            return int(float(val_str))
-        except: return 0
-
     if not st.session_state.manual_mode:
         try:
             df_raw = pd.read_csv(SHEET_URL, header=None)
-            rows, cols = df_raw.shape
-            for r in range(rows):
-                for c in range(cols):
-                    cell_val = str(df_raw.iloc[r, c]).strip()
-                    if cell_val.isdigit():
-                        sid = int(cell_val)
-                        if sid in HUMAN_IDS: # Logic restricted to 1-14
-                            if c + 3 < cols:
-                                p_val = clean_val(df_raw.iloc[r, c + 2])
-                                i_val = clean_val(df_raw.iloc[r, c + 3])
-                                data_p[sid] = data_p.get(sid, 0) + p_val
-                                data_i[sid] = data_i.get(sid, 0) + i_val
-        except Exception as e:
-            st.error(f"Error de conexión: {e}")
+            for r in range(len(df_raw)):
+                for c in range(len(df_raw.columns)):
+                    cell = str(df_raw.iloc[r, c]).strip()
+                    if cell.isdigit() and int(cell) in HUMAN_IDS:
+                        sid = int(cell)
+                        data_p[sid] = clean_val(df_raw.iloc[r, c + 2])
+                        data_i[sid] = clean_val(df_raw.iloc[r, c + 3])
+        except Exception as e: st.error(f"Error: {e}")
 
-    combined = []
-    for sid in HUMAN_IDS:
-        p_val, i_val = data_p.get(sid, 0), data_i.get(sid, 0)
-        combined.append({"ID": sid, "Surtidor": f"Surtidor {sid}", "Pedidos": p_val, "Piezas": i_val})
-    
-    st.session_state.final_ranking = sorted(combined, key=lambda x: x['Pedidos'], reverse=True)
-    st.session_state.scores = {sid: data_p.get(sid, 0) for sid in HUMAN_IDS}
+    st.session_state.final_ranking = sorted(
+        [{"ID": i, "Surtidor": f"Surtidor {i}", "Pedidos": data_p.get(i,0), "Piezas": data_i.get(i,0)} for i in HUMAN_IDS],
+        key=lambda x: x['Pedidos'], reverse=True
+    )
+    st.session_state.scores = {i: data_p.get(i,0) for i in HUMAN_IDS}
     st.rerun()
 
-# --- VISUALS ---
+# --- VISUALS & AUSENCIAS ---
 if st.session_state.final_ranking:
-    st.write("---")
     full_df = pd.DataFrame(st.session_state.final_ranking)
-    df_active = full_df[full_df['Pedidos'] > 0].copy()
+    df_active = full_df[full_df['Pedidos'] > 0]
     
     col_chart, col_table = st.columns([1, 1])
-    
     with col_chart:
         if not df_active.empty:
             fig = px.pie(df_active, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
-            fig.update_traces(textinfo='percent+label', textfont_size=11, marker=dict(line=dict(color='#17202A', width=2)))
-            fig.update_layout(height=400, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(t=10, b=10, l=10, r=10))
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No hay datos de pedidos hoy.")
-        
     with col_table:
         st.markdown("### 🏅 Ranking (IDs 1-14)")
         st.table(df_active[["Surtidor", "Pedidos", "Piezas"]])
 
-    # --- AUSENCIAS (FIXED LOGIC) ---
     st.write("---")
     st.markdown("### ⚠️ AUSENCIAS")
-    
     try:
-        # Fetching from the specific Ausencias gid tab
+        # Load the specific tab for Ausencias
         df_abs = pd.read_csv(ABSENCIAS_URL, header=None)
-        rows, cols = df_abs.shape
-        absent_surtidores = []
+        absents = []
+        for r in range(len(df_abs)):
+            for c in range(len(df_abs.columns)):
+                cell = str(df_abs.iloc[r, c]).strip()
+                if cell.isdigit() and int(cell) in HUMAN_IDS:
+                    if clean_val(df_abs.iloc[r, c + 2]) == 0:
+                        absents.append(f"Surtidor {cell}")
         
-        # Scans sheet for Surtidor IDs 1-14 and checks if Pedidos (c+2) is 0
-        for r in range(rows):
-            for c in range(cols):
-                cell_val = str(df_abs.iloc[r, c]).strip()
-                if cell_val.isdigit():
-                    sid = int(cell_val)
-                    if sid in HUMAN_IDS:
-                        pedidos_hoy = clean_val(df_abs.iloc[r, c + 2])
-                        if pedidos_hoy == 0:
-                            absent_surtidores.append(f"Surtidor {sid}")
-        
-        if absent_surtidores:
-            # Remove duplicates and sort
-            absent_surtidores = sorted(list(set(absent_surtidores)), key=lambda x: int(x.split()[-1]))
-            absence_list = ", ".join(absent_surtidores)
-            st.markdown(f'<div class="absence-box"><b>Surtidores (1-14) con 0 pedidos hoy:</b><br>{absence_list}</div>', unsafe_allow_html=True)
+        if absents:
+            st.markdown(f'<div class="absence-box"><b>Faltantes hoy (1-14):</b><br>{", ".join(sorted(list(set(absents))))}</div>', unsafe_allow_html=True)
         else:
-            st.success("Asistencia completa (Todos los IDs 1-14 tienen pedidos).")
-            
-    except Exception as e:
-        st.error("No se pudo cargar la pestaña de ausencias.")
+            st.success("Asistencia completa (1-14).")
+    except:
+        st.error("Error cargando pestaña de Ausencias.")
