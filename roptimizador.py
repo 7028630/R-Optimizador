@@ -5,7 +5,7 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 ALL_IDS = list(range(1, 22)) 
-HUMAN_IDS = list(range(1, 15))  # IDs 1 through 14
+HUMAN_IDS = list(range(1, 15))  # IDs 1 through 14 (Surtidores humanos)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv"
 
 # --- UI STYLE ---
@@ -29,7 +29,7 @@ st.markdown("""
     .turn-pill { background: #C0392B; color: white !important; padding: 2px 8px; border-radius: 10px; margin: 2px; display: inline-block; font-size: 0.8rem; font-weight: bold; }
     .summary-box { background-color: #212F3C; padding: 10px; border-radius: 8px; border-left: 4px solid #C0392B; margin-top: 10px; }
     .summary-row { display: flex; justify-content: space-between; font-size: 0.85rem; border-bottom: 1px solid #2C3E50; padding: 2px 0; }
-    div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; }
+    div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; border: none; }
     .absence-box { background-color: #7B241C; padding: 15px; border-radius: 8px; border-left: 5px solid #E74C3C; margin-top: 10px; }
     </style>
 """, unsafe_allow_html=True)
@@ -55,31 +55,39 @@ with st.sidebar:
     with h1: st.markdown("**ID**")
     with h2: st.markdown("**On**")
     with h3: st.markdown('<span class="lunch-label">🍴</span>', unsafe_allow_html=True)
+    
     for sid in ALL_IDS:
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1: st.markdown(f"**Surtidor {sid}**")
         with col2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
         with col3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
-        # Only include in Turn generation if it's a Human ID (1-14)
+        # EXCLUDE IDs > 14 from logic calculations
         if on and not meal and sid in HUMAN_IDS: 
             active_ids.append(sid)
 
     st.write("---")
-    if st.button("🚀 GENERAR TURNOS"):
-        st.session_state.show_turns = True
+    
+    # Toggle button for the turns section
+    btn_label = "👁️ OCULTAR TURNOS" if st.session_state.show_turns else "🚀 GENERAR TURNOS"
+    if st.button(btn_label):
+        st.session_state.show_turns = not st.session_state.show_turns
+        st.rerun()
 
     if st.session_state.show_turns and st.session_state.scores and active_ids:
         st.markdown("### ⏭️ Siguientes 20 Turnos")
         temp_scores = st.session_state.scores.copy()
         simulated_turns = []
         turn_counts = {}
+        
         for _ in range(20):
+            # Only calculate turns for active human IDs
             valid_candidates = {k: v for k, v in temp_scores.items() if k in active_ids}
             if not valid_candidates: break
             next_person = min(valid_candidates, key=valid_candidates.get)
             simulated_turns.append(next_person)
             turn_counts[next_person] = turn_counts.get(next_person, 0) + 1
             temp_scores[next_person] += 1
+            
         st.markdown("".join([f'<span class="turn-pill">S{t}</span>' for t in simulated_turns]), unsafe_allow_html=True)
         summary_html = '<div class="summary-box"><b>Distribución:</b><br>'
         sorted_counts = sorted(turn_counts.items(), key=lambda x: x[1], reverse=True)
@@ -139,7 +147,6 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     
     st.session_state.final_ranking = sorted(combined, key=lambda x: x['Pedidos'], reverse=True)
     st.session_state.scores = {sid: data_p.get(sid, 0) for sid in ALL_IDS}
-    st.session_state.show_turns = False
     st.rerun()
 
 # --- VISUALS ---
@@ -154,7 +161,7 @@ if st.session_state.final_ranking:
     with col_chart:
         fig = px.pie(df_active, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
         fig.update_traces(textinfo='percent+label', textfont_size=11, marker=dict(line=dict(color='#17202A', width=2)))
-        fig.update_layout(height=450, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(t=10, b=10, l=10, r=10))
+        fig.update_layout(height=400, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
         
     with col_table:
@@ -164,11 +171,11 @@ if st.session_state.final_ranking:
     # --- AUSENCIAS ---
     st.write("---")
     st.markdown("### ⚠️ AUSENCIAS")
-    # Only report absences for HUMAN_IDS (1-14)
+    # ONLY check for HUMAN_IDS 1-14. Completely ignore IDs 15-21 here.
     absent_surtidores = full_df[(full_df['Pedidos'] == 0) & (full_df['ID'].isin(HUMAN_IDS))]['Surtidor'].tolist()
     
     if absent_surtidores:
         absence_list = ", ".join(absent_surtidores)
-        st.markdown(f'<div class="absence-box"><b>Surtidores (1-14) sin pedidos registrados hoy:</b><br>{absence_list}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="absence-box"><b>Surtidores (1-14) faltantes hoy:</b><br>{absence_list}</div>', unsafe_allow_html=True)
     else:
-        st.success("Asistencia completa para surtidores del 1 al 14.")
+        st.success("Asistencia completa (1-14).")
