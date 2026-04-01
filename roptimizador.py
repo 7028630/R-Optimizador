@@ -5,7 +5,6 @@ import plotly.express as px
 
 # --- CONFIGURATION ---
 ALL_IDS = list(range(1, 22)) 
-# Updated URL with the specific GID for ABRIL 2026
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv&gid=767368955"
 
 # --- UI STYLE ---
@@ -83,16 +82,18 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
         rows, cols = df_raw.shape
 
         # 1. Main Grid Logic (Productivity)
+        # Optimized: Only check columns A, D, G to prevent duplicate ID detection
         for r in range(rows):
-            for c in range(cols):
-                cell_val = str(df_raw.iloc[r, c]).strip()
-                if cell_val.isdigit():
-                    sid = int(cell_val)
-                    if sid in ALL_IDS:
-                        p_val = clean_val(df_raw.iloc[r, c + 2]) if c+2 < cols else 0
-                        i_val = clean_val(df_raw.iloc[r, c + 3]) if c+3 < cols else 0
-                        data_p[sid] = data_p.get(sid, 0) + p_val
-                        data_i[sid] = data_i.get(sid, 0) + i_val
+            for c in [0, 3, 6]: 
+                if c < cols:
+                    cell_val = str(df_raw.iloc[r, c]).strip()
+                    if cell_val.isdigit():
+                        sid = int(cell_val)
+                        if sid in ALL_IDS:
+                            p_val = clean_val(df_raw.iloc[r, c + 2]) if c+2 < cols else 0
+                            i_val = clean_val(df_raw.iloc[r, c + 3]) if c+3 < cols else 0
+                            data_p[sid] = data_p.get(sid, 0) + p_val
+                            data_i[sid] = data_i.get(sid, 0) + i_val
         
         # 2. Ausencias Feature (Table J2:L23)
         for r in range(2, 23): 
@@ -141,7 +142,6 @@ if st.session_state.final_ranking:
         st.markdown("### 🏅 Ranking")
         st.table(df_active[["Surtidor", "Pedidos", "Piezas"]])
 
-    # --- AUSENCIAS SECTION ---
     st.write("---")
     st.markdown("### ⚠️ AUSENCIAS")
     filter_input = st.text_input("Filtro (ID o 'T' para ausentes):", key="abs_filter").strip().upper()
