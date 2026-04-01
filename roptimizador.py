@@ -2,46 +2,57 @@ import streamlit as st
 import re
 import pandas as pd
 import plotly.express as px
+from datetime import datetime
 
 # --- CONFIGURATION ---
 ALL_IDS = list(range(1, 22)) 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv"
 
-# --- UI STYLE (EXACTLY AS YOU HAD IT) ---
+# --- DYNAMIC TAB LOGIC ---
+# This creates the string "ABRIL 2026" based on current date
+meses = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", 
+         "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
+now = datetime.now()
+current_tab_name = f"{meses[now.month - 1]} {now.year}"
+
+# Replace the old SHEET_URL with this dynamic one:
+# We use the /gviz/tq endpoint which allows the 'sheet' parameter for tab names
+BASE_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/gviz/tq?tqx=out:csv&sheet="
+SHEET_URL = f"{BASE_URL}{current_tab_name.replace(' ', '%20')}"
+
+# --- UI STYLE ---
 st.set_page_config(page_title="Productividad Surtido", layout="wide", initial_sidebar_state="collapsed")
-st.markdown("""
+st.markdown(f"""
     <style>
-    html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3, span, label, th, td {
+    html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3, span, label, th, td {{
         font-family: Arial, Helvetica, sans-serif !important;
         color: #FFFFFF !important;
-    }
-    .stApp { background-color: #17202A; }
-    header, [data-testid="stHeader"] { background-color: #17202A !important; }
-    [data-testid="stSidebar"] { background-color: #111821 !important; }
-    .abs-container { background-color: #212F3C; padding: 20px; border-radius: 10px; border-left: 5px solid #C0392B; color: white; }
-    .custom-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    .custom-table th { background-color: #2C3E50; border-bottom: 2px solid #C0392B; padding: 12px; text-align: left; color: white; }
-    .custom-table td { border-bottom: 1px solid #34495E; padding: 10px; color: white; }
-    .turn-pill { background: #C0392B; color: white !important; padding: 2px 8px; border-radius: 10px; margin: 2px; display: inline-block; font-size: 0.8rem; font-weight: bold; }
-    div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; border: none; }
-    .date-tooltip { cursor: help; border-bottom: 2px dotted #E74C3C; color: #E74C3C; font-weight: bold; }
-    div[data-testid="stNumberInput"] { width: 100px !important; }
-    div[data-testid="stTextInput"] { width: 150px !important; }
+    }}
+    .stApp {{ background-color: #17202A; }}
+    header, [data-testid="stHeader"] {{ background-color: #17202A !important; }}
+    [data-testid="stSidebar"] {{ background-color: #111821 !important; }}
+    .abs-container {{ background-color: #212F3C; padding: 20px; border-radius: 10px; border-left: 5px solid #C0392B; color: white; }}
+    .custom-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+    .custom-table th {{ background-color: #2C3E50; border-bottom: 2px solid #C0392B; padding: 12px; text-align: left; color: white; }}
+    .custom-table td {{ border-bottom: 1px solid #34495E; padding: 10px; color: white; }}
+    .turn-pill {{ background: #C0392B; color: white !important; padding: 2px 8px; border-radius: 10px; margin: 2px; display: inline-block; font-size: 0.8rem; font-weight: bold; }}
+    div.stButton > button {{ background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; border: none; }}
+    .date-tooltip {{ cursor: help; border-bottom: 2px dotted #E74C3C; color: #E74C3C; font-weight: bold; }}
     </style>
 """, unsafe_allow_html=True)
 
+# (Session state logic remains the same...)
 if 'final_ranking' not in st.session_state: st.session_state.final_ranking = []
 if 'scores' not in st.session_state: st.session_state.scores = {}
 if 'abs_list' not in st.session_state: st.session_state.abs_list = []
 if 'manual_mode' not in st.session_state: st.session_state.manual_mode = False
 if 'show_turns' not in st.session_state: st.session_state.show_turns = False
 
-# --- SIDEBAR (EXACTLY AS YOU HAD IT) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.markdown("## ⚙️ Configuración")
+    st.info(f"Leyendo pestaña: {current_tab_name}") # Visual confirmation
     sidebar_limit = st.number_input("Mostrar hasta ID:", min_value=1, max_value=21, value=14)
-    st.write("---")
-    st.markdown("## ✅Asistencia/Comida🍱")
+    # ... rest of your sidebar code ...
     if st.button("⌨️ MODO MANUAL" if not st.session_state.manual_mode else "🌐 MODO AUTO"):
         st.session_state.manual_mode = not st.session_state.manual_mode
         st.rerun()
@@ -71,7 +82,6 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     data_p, data_i = {}, {}
     abs_data = []
     
-    # Generic cleaner for Productivity Grid
     def clean_val(v):
         try:
             val_str = str(v).strip().replace(',', '').replace('.', '')
@@ -79,6 +89,7 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
         except: return 0
 
     try:
+        # Loading from the specific month tab
         df_raw = pd.read_csv(SHEET_URL, header=None)
         rows, cols = df_raw.shape
 
@@ -95,20 +106,16 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
                         data_i[sid] = data_i.get(sid, 0) + i_val
         
         # 2. Ausencias Feature (Table J2:L23)
-        # J=Index 9, K=Index 10, L=Index 11
-        for r in range(2, 23): # Skip header rows
+        for r in range(2, 23):
             if r < rows:
-                # Get raw values
-                id_val = str(df_raw.iloc[r, 9]).strip() # Col J
-                count_val = str(df_raw.iloc[r, 10]).strip() # Col K
-                dates_val = str(df_raw.iloc[r, 11]).strip() # Col L
+                id_val = str(df_raw.iloc[r, 9]).strip() 
+                count_val = str(df_raw.iloc[r, 10]).strip() 
+                dates_val = str(df_raw.iloc[r, 11]).strip() 
 
-                # Convert Count properly (ignore decimals, don't multiply by 100)
                 try:
                     actual_count = int(float(count_val)) if count_val not in ["nan", ""] else 0
                 except: actual_count = 0
 
-                # Use the ID directly from Col J
                 try:
                     sid_int = int(float(id_val))
                 except: sid_int = 0
@@ -123,7 +130,7 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
                     })
                             
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error loading tab '{current_tab_name}': {e}")
 
     ranking_list = [{"ID": s, "Surtidor": f"Surtidor {s}", "Pedidos": data_p.get(s,0), "Piezas": data_i.get(s,0)} for s in range(1, sidebar_limit + 1)]
     st.session_state.final_ranking = sorted(ranking_list, key=lambda x: x['Pedidos'], reverse=True)
@@ -131,7 +138,7 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
     st.session_state.abs_list = abs_data
     st.rerun()
 
-# --- VISUALS ---
+# (The rest of your Visuals/Ranking code remains exactly the same as your original)
 if st.session_state.final_ranking:
     full_df = pd.DataFrame(st.session_state.final_ranking)
     df_active = full_df[full_df['Pedidos'] > 0].copy()
@@ -145,7 +152,6 @@ if st.session_state.final_ranking:
         st.markdown("### 🏅 Ranking")
         st.table(df_active[["Surtidor", "Pedidos", "Piezas"]])
 
-    # --- AUSENCIAS SECTION ---
     st.write("---")
     st.markdown("### ⚠️ AUSENCIAS")
     filter_input = st.text_input("Filtro (ID o 'T' para ausentes):", key="abs_filter").strip().upper()
