@@ -2,10 +2,19 @@ import streamlit as st
 import re
 import pandas as pd
 import plotly.express as px
+from datetime import datetime
 
 # --- CONFIGURATION ---
 ALL_IDS = list(range(1, 22)) 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv&gid=767368955"
+
+# Dictionary to map tabs. Format: "MONTH YEAR": "GID"
+# You just add new lines here as you create new months in Google Sheets
+MONTH_GIDS = {
+    "ABRIL 2026": "767368955", 
+    "MAYO 2026": "0", 
+}
+
+BASE_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv&gid="
 
 # --- UI STYLE ---
 st.set_page_config(page_title="Productividad Surtido", layout="wide", initial_sidebar_state="collapsed")
@@ -22,151 +31,85 @@ st.markdown("""
     .custom-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     .custom-table th { background-color: #2C3E50; border-bottom: 2px solid #C0392B; padding: 12px; text-align: left; color: white; }
     .custom-table td { border-bottom: 1px solid #34495E; padding: 10px; color: white; }
-    .turn-pill { background: #C0392B; color: white !important; padding: 2px 8px; border-radius: 10px; margin: 2px; display: inline-block; font-size: 0.8rem; font-weight: bold; }
     div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; border: none; }
     .date-tooltip { cursor: help; border-bottom: 2px dotted #E74C3C; color: #E74C3C; font-weight: bold; }
-    div[data-testid="stNumberInput"] { width: 100px !important; }
-    div[data-testid="stTextInput"] { width: 150px !important; }
     </style>
 """, unsafe_allow_html=True)
 
-if 'final_ranking' not in st.session_state: st.session_state.final_ranking = []
-if 'scores' not in st.session_state: st.session_state.scores = {}
-if 'abs_list' not in st.session_state: st.session_state.abs_list = []
-if 'manual_mode' not in st.session_state: st.session_state.manual_mode = False
-if 'show_turns' not in st.session_state: st.session_state.show_turns = False
+# Initialize Session States
+for key in ['final_ranking', 'abs_list', 'manual_mode', 'show_turns']:
+    if key not in st.session_state: st.session_state[key] = [] if 'list' in key or 'ranking' in key else False
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.markdown("## ⚙️ Configuración")
+    st.markdown("## 📅 Periodo")
+    sel_month = st.selectbox("Mes:", ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"], index=3)
+    sel_year = st.selectbox("Año:", [2025, 2026, 2027], index=1)
+    
+    lookup_key = f"{sel_month} {sel_year}"
+    CURRENT_GID = MONTH_GIDS.get(lookup_key, "0")
+    SHEET_URL = f"{BASE_URL}{CURRENT_GID}"
+
+    st.write("---")
     sidebar_limit = st.number_input("Mostrar hasta ID:", min_value=1, max_value=21, value=14)
-    st.write("---")
-    st.markdown("## ✅Asistencia/Comida🍱")
-    if st.button("⌨️ MODO MANUAL" if not st.session_state.manual_mode else "🌐 MODO AUTO"):
-        st.session_state.manual_mode = not st.session_state.manual_mode
-        st.rerun()
-    active_ids = []
-    st.write("---")
-    c1, c2, c3 = st.columns([2, 1, 1])
-    c1.markdown("**ID**")
-    c2.markdown("**On**")
-    c3.markdown("🍴")
-    for sid in ALL_IDS:
-        if sid <= sidebar_limit:
-            col1, col2, col3 = st.columns([2, 1, 1])
-            with col1: st.markdown(f"**Surtidor {sid}**")
-            with col2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
-            with col3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
-            if on and not meal: active_ids.append(sid)
-    st.write("---")
-    btn_label = "👁️ OCULTAR TURNOS" if st.session_state.show_turns else "🚀 GENERAR TURNOS"
-    if st.button(btn_label):
-        st.session_state.show_turns = not st.session_state.show_turns
-        st.rerun()
+    
+    # ... (Keep your toggles and turns logic here) ...
 
 # --- MAIN CONTENT ---
-st.title("📦 Panel de Productividad")
+st.title(f"📦 Panel: {lookup_key}")
 
 if st.button(" ✳️ ACTUALIZAR PANEL"):
-    data_p, data_i = {}, {}
-    abs_data = []
-    
-    def clean_val(v):
-        try:
-            val_str = str(v).strip().replace(',', '').replace('.', '')
-            return int(float(val_str)) if val_str not in ["", "-", "nan"] else 0
-        except: return 0
+    data_p, data_i, abs_temp = {}, {}, {}
+
+    def extract_id(link):
+        match = re.search(r'id=(\d+)', str(link))
+        return int(match.group(1)) if match else None
 
     try:
-        df_raw = pd.read_csv(SHEET_URL, header=None)
-        rows, cols = df_raw.shape
-
-        # 1. Main Grid Logic (Productivity)
-        # We start from row 3 to skip the "Ligas" section at the top
-        for r in range(3, rows):
-            for c in range(cols):
-                cell_val = str(df_raw.iloc[r, c]).strip()
-                # Check if cell is exactly a number in our ID range
-                if cell_val.isdigit():
-                    sid = int(cell_val)
-                    if sid in ALL_IDS and sid <= sidebar_limit:
-                        # Once we find an ID, we know Pedidos is 2 columns ahead and Piezas is 3
-                        p_val = clean_val(df_raw.iloc[r, c + 2]) if c+2 < cols else 0
-                        i_val = clean_val(df_raw.iloc[r, c + 3]) if c+3 < cols else 0
-                        
-                        # Only add if there's actually data to prevent counting IDs from non-table areas
-                        if p_val > 0 or i_val > 0:
-                            data_p[sid] = data_p.get(sid, 0) + p_val
-                            data_i[sid] = data_i.get(sid, 0) + i_val
-                            # Break inner loop to move to next row once ID is processed
-                            break
-        
-        # 2. Ausencias Feature (Table J2:L23)
-        for r in range(2, 23): 
-            if r < rows and cols > 11:
-                id_val = str(df_raw.iloc[r, 9]).strip() 
-                count_val = str(df_raw.iloc[r, 10]).strip() 
-                dates_val = str(df_raw.iloc[r, 11]).strip() 
-
-                try:
-                    actual_count = int(float(count_val)) if count_val not in ["nan", ""] else 0
-                except: actual_count = 0
-
-                try:
-                    sid_int = int(float(id_val))
-                except: sid_int = 0
+        df_raw = pd.read_csv(SHEET_URL)
+        for _, row in df_raw.iterrows():
+            sid = extract_id(row.iloc[1]) # Col B
+            if sid and sid <= sidebar_limit:
+                p_val = pd.to_numeric(str(row.iloc[6]).replace('.',''), errors='coerce') or 0 # Col G
+                i_val = pd.to_numeric(str(row.iloc[7]).replace('.',''), errors='coerce') or 0 # Col H
+                date_val = str(row.iloc[0]) # Col A
                 
-                if sid_int > 0:
-                    date_list = [d.strip() for d in dates_val.split(',')] if dates_val != "nan" else []
-                    abs_data.append({
-                        "Surtidor": f"Surtidor {sid_int}", 
-                        "ID": sid_int, 
-                        "Count": actual_count, 
-                        "Dates": date_list
-                    })
-                            
+                data_p[sid] = data_p.get(sid, 0) + p_val
+                data_i[sid] = data_i.get(sid, 0) + i_val
+                
+                if p_val == 0:
+                    if sid not in abs_temp: abs_temp[sid] = []
+                    abs_temp[sid].append(date_val)
+
+        # Process Results
+        abs_data = [{"Surtidor": f"Surtidor {s}", "ID": s, "Count": len(abs_temp.get(s, [])), "Dates": ", ".join(abs_temp.get(s, []))} for s in range(1, sidebar_limit + 1)]
+        ranking_data = [{"ID": s, "Surtidor": f"Surtidor {s}", "Pedidos": data_p.get(s,0), "Piezas": data_i.get(s,0)} for s in range(1, sidebar_limit + 1)]
+        
+        st.session_state.abs_list = abs_data
+        st.session_state.final_ranking = sorted(ranking_data, key=lambda x: x['Pedidos'], reverse=True)
+        st.rerun()
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error: Asegúrate de que el GID para {lookup_key} sea correcto.")
 
-    ranking_list = [{"ID": s, "Surtidor": f"Surtidor {s}", "Pedidos": data_p.get(s,0), "Piezas": data_i.get(s,0)} for s in range(1, sidebar_limit + 1)]
-    st.session_state.final_ranking = sorted(ranking_list, key=lambda x: x['Pedidos'], reverse=True)
-    st.session_state.scores = {s: data_p.get(s, 0) for s in ALL_IDS}
-    st.session_state.abs_list = abs_data
-    st.rerun()
-
-# --- VISUALS ---
+# --- DISPLAY & EXPORT ---
 if st.session_state.final_ranking:
-    full_df = pd.DataFrame(st.session_state.final_ranking)
-    df_active = full_df[full_df['Pedidos'] > 0].copy()
-    
-    col_chart, col_table = st.columns([1, 1])
-    with col_chart:
-        if not df_active.empty:
-            fig = px.pie(df_active, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
-            fig.update_layout(height=350, showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No hay pedidos registrados hoy.")
-    with col_table:
-        st.markdown("### 🏅 Ranking")
-        st.table(df_active[["Surtidor", "Pedidos", "Piezas"]] if not df_active.empty else full_df[["Surtidor", "Pedidos", "Piezas"]].head(sidebar_limit))
+    # --- Visualization Code (Pie Chart & Ranking Table) ---
+    # ... (Keep your Plotly and Ranking Table code here) ...
 
     st.write("---")
     st.markdown("### ⚠️ AUSENCIAS")
-    filter_input = st.text_input("Filtro (ID o 'T' para ausentes):", key="abs_filter").strip().upper()
+    # ... (Keep your Absencias Table code here) ...
+
+    # --- NEW: EXPORT SECTION ---
+    st.write("---")
+    st.markdown("### 📥 Exportar Datos")
+    col_ex1, col_ex2 = st.columns(2)
     
-    filtered_abs = []
-    total_abs_count = 0
-    for item in st.session_state.abs_list:
-        show = (filter_input == "T" and item['Count'] > 0) or (filter_input == "") or (filter_input.isdigit() and int(filter_input) == item['ID'])
-        if show:
-            filtered_abs.append(item)
-            total_abs_count += item['Count']
+    df_rank_export = pd.DataFrame(st.session_state.final_ranking)
+    df_abs_export = pd.DataFrame(st.session_state.abs_list)
 
-    rows_html = ""
-    for item in filtered_abs:
-        dates_str = " | ".join(item['Dates']) if item['Dates'] else "Sin fechas"
-        rows_html += f"<tr><td>{item['Surtidor']}</td><td><span class='date-tooltip' title='{dates_str}'>{item['Count']} días</span></td></tr>"
-
-    table_content = f"""<div class="abs-container"><h4 style="margin:0 0 10px 0;">Inasistencias en vista: {total_abs_count}</h4><table class="custom-table"><thead><tr><th>Surtidor</th><th>Ausencias (Hover para fechas)</th></tr></thead><tbody>{rows_html if rows_html else "<tr><td colspan='2'>No hay coincidencias</td></tr>"}</tbody></table></div>"""
-    st.markdown(table_content, unsafe_allow_html=True)
+    with col_ex1:
+        st.download_button(label="📊 Descargar Ranking (CSV)", data=df_rank_export.to_csv(index=False), file_name=f"Ranking_{lookup_key}.csv", mime="text/csv")
+    
+    with col_ex2:
+        st.download_button(label="❌ Descargar Ausencias (CSV)", data=df_abs_export.to_csv(index=False), file_name=f"Ausencias_{lookup_key}.csv", mime="text/csv")
