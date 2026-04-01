@@ -82,22 +82,28 @@ if st.button(" ✳️ ACTUALIZAR PANEL"):
         rows, cols = df_raw.shape
 
         # 1. Main Grid Logic (Productivity)
-        # Optimized: Only check columns A, D, G to prevent duplicate ID detection
-        for r in range(rows):
-            for c in [0, 3, 6]: 
-                if c < cols:
-                    cell_val = str(df_raw.iloc[r, c]).strip()
-                    if cell_val.isdigit():
-                        sid = int(cell_val)
-                        if sid in ALL_IDS:
-                            p_val = clean_val(df_raw.iloc[r, c + 2]) if c+2 < cols else 0
-                            i_val = clean_val(df_raw.iloc[r, c + 3]) if c+3 < cols else 0
+        # We start from row 3 to skip the "Ligas" section at the top
+        for r in range(3, rows):
+            for c in range(cols):
+                cell_val = str(df_raw.iloc[r, c]).strip()
+                # Check if cell is exactly a number in our ID range
+                if cell_val.isdigit():
+                    sid = int(cell_val)
+                    if sid in ALL_IDS and sid <= sidebar_limit:
+                        # Once we find an ID, we know Pedidos is 2 columns ahead and Piezas is 3
+                        p_val = clean_val(df_raw.iloc[r, c + 2]) if c+2 < cols else 0
+                        i_val = clean_val(df_raw.iloc[r, c + 3]) if c+3 < cols else 0
+                        
+                        # Only add if there's actually data to prevent counting IDs from non-table areas
+                        if p_val > 0 or i_val > 0:
                             data_p[sid] = data_p.get(sid, 0) + p_val
                             data_i[sid] = data_i.get(sid, 0) + i_val
+                            # Break inner loop to move to next row once ID is processed
+                            break
         
         # 2. Ausencias Feature (Table J2:L23)
         for r in range(2, 23): 
-            if r < rows:
+            if r < rows and cols > 11:
                 id_val = str(df_raw.iloc[r, 9]).strip() 
                 count_val = str(df_raw.iloc[r, 10]).strip() 
                 dates_val = str(df_raw.iloc[r, 11]).strip() 
@@ -135,12 +141,15 @@ if st.session_state.final_ranking:
     
     col_chart, col_table = st.columns([1, 1])
     with col_chart:
-        fig = px.pie(df_active, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
-        fig.update_layout(height=350, showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
+        if not df_active.empty:
+            fig = px.pie(df_active, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
+            fig.update_layout(height=350, showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No hay pedidos registrados hoy.")
     with col_table:
         st.markdown("### 🏅 Ranking")
-        st.table(df_active[["Surtidor", "Pedidos", "Piezas"]])
+        st.table(df_active[["Surtidor", "Pedidos", "Piezas"]] if not df_active.empty else full_df[["Surtidor", "Pedidos", "Piezas"]].head(sidebar_limit))
 
     st.write("---")
     st.markdown("### ⚠️ AUSENCIAS")
