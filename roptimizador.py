@@ -1,120 +1,343 @@
 import streamlit as st
+
 import re
+
 import pandas as pd
 
-# --- 1. THE MASTER KEY ---
-# Open one of your daily links. Look at the URL. 
-# Whatever number follows 'gid=' is what you put here.
-# Usually, the first tab is 0, but since you have multiple, it might be different.
-DAILY_TAB_GID = "0" 
+import plotly.express as px
 
-MONTH_GIDS = {
-    "ABRIL 2026": "2083245391",
-}
-BASE_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv&gid="
 
-# --- 2. THE "I CAN ACTUALLY SEE IT" STYLE ---
-st.set_page_config(page_title="Productividad Surtido", layout="wide")
+
+# --- CONFIGURATION ---
+
+ALL_IDS = list(range(1, 22)) 
+
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1_O8vDPqBIMH1m7VrJ1faviWIoM5fX5TmYb597wzTXUc/export?format=csv&gid=767368955"
+
+
+
+# --- UI STYLE ---
+
+st.set_page_config(page_title="Productividad Surtido", layout="wide", initial_sidebar_state="collapsed")
+
 st.markdown("""
+
     <style>
-    .stApp { background-color: #17202A; }
-    h1, h2, h3, p, span, label { color: #FFFFFF !important; }
-    
-    /* THE BUTTON: Absolute Contrast (Red with Black Text) */
-    div.stButton > button { 
-        background-color: #FF0000 !important; 
-        color: #000000 !important; 
-        font-weight: 900 !important;
-        border: 4px solid #FFFFFF !important;
-        height: 4em !important;
-        font-size: 1.2rem !important;
+
+    html, body, [class*="css"], .stText, .stMarkdown, .stTable, .stDataFrame p, h1, h2, h3, span, label, th, td {
+
+        font-family: Arial, Helvetica, sans-serif !important;
+
+        color: #FFFFFF !important;
+
     }
-    
-    /* Table Fix */
-    .stTable, .stDataFrame { background-color: #1C2833 !important; border: 1px solid #34495E; }
+
+    .stApp { background-color: #17202A; }
+
+    header, [data-testid="stHeader"] { background-color: #17202A !important; }
+
+    [data-testid="stSidebar"] { background-color: #111821 !important; }
+
+    .abs-container { background-color: #212F3C; padding: 20px; border-radius: 10px; border-left: 5px solid #C0392B; color: white; }
+
+    .custom-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+
+    .custom-table th { background-color: #2C3E50; border-bottom: 2px solid #C0392B; padding: 12px; text-align: left; color: white; }
+
+    .custom-table td { border-bottom: 1px solid #34495E; padding: 10px; color: white; }
+
+    .turn-pill { background: #C0392B; color: white !important; padding: 2px 8px; border-radius: 10px; margin: 2px; display: inline-block; font-size: 0.8rem; font-weight: bold; }
+
+    div.stButton > button { background-color: #C0392B !important; color: #FFFFFF !important; font-weight: bold !important; width: 100%; border: none; }
+
+    .date-tooltip { cursor: help; border-bottom: 2px dotted #E74C3C; color: #E74C3C; font-weight: bold; }
+
+    div[data-testid="stNumberInput"] { width: 100px !important; }
+
+    div[data-testid="stTextInput"] { width: 150px !important; }
+
     </style>
+
 """, unsafe_allow_html=True)
 
-# --- 3. SIDEBAR ---
+
+
+if 'final_ranking' not in st.session_state: st.session_state.final_ranking = []
+
+if 'scores' not in st.session_state: st.session_state.scores = {}
+
+if 'abs_list' not in st.session_state: st.session_state.abs_list = []
+
+if 'manual_mode' not in st.session_state: st.session_state.manual_mode = False
+
+if 'show_turns' not in st.session_state: st.session_state.show_turns = False
+
+
+
+# --- SIDEBAR ---
+
 with st.sidebar:
-    st.header("⚙️ Settings")
-    sel_month = st.selectbox("Mes Actual:", list(MONTH_GIDS.keys()))
-    limit = st.number_input("IDs (1-14 o 1-21):", 1, 21, 14)
-    MASTER_URL = f"{BASE_URL}{MONTH_GIDS[sel_month]}"
 
-# --- 4. THE BRAIN (WITH DEBUGGING) ---
-st.title(f"🚀 Panel: {sel_month}")
+    st.markdown("## ⚙️ Configuración")
 
-if st.button("ACTUALIZAR DATOS DE LA LISTA"):
-    try:
-        master_df = pd.read_csv(MASTER_URL)
-        
-        totals_p = {i: 0 for i in range(1, limit + 1)}
-        totals_i = {i: 0 for i in range(1, limit + 1)}
-        abs_dates = {i: [] for i in range(1, limit + 1)}
+    sidebar_limit = st.number_input("Mostrar hasta ID:", min_value=1, max_value=21, value=14)
 
-        status = st.empty()
-        debug_area = st.expander("🛠 Ver lo que Python está leyendo (Debug)")
+    st.write("---")
 
-        for index, row in master_df.iterrows():
-            fecha = str(row.iloc[0])
-            url_raw = str(row.iloc[1])
-            
-            if "/edit" in url_raw:
-                csv_url = url_raw.split('/edit')[0] + f"/export?format=csv&gid={DAILY_TAB_GID}"
-                
-                try:
-                    # header=None helps us see exactly which column is which
-                    day_df = pd.read_csv(csv_url)
-                    
-                    # DEBUG: Let's see the first row of the first link to verify columns
-                    if index == 0:
-                        debug_area.write("Columnas detectadas en el primer link:")
-                        debug_area.dataframe(day_df.head(3))
+    st.markdown("## ✅Asistencia/Comida🍱")
 
-                    for sid in range(1, limit + 1):
-                        # Use Index 1 for Column B (ID)
-                        # Use Index 3 for Column D (Pedidos)
-                        # Use Index 4 for Column E (Piezas)
-                        match = day_df[day_df.iloc[:, 1].astype(str).str.strip() == str(sid)]
-                        
-                        if not match.empty:
-                            p_raw = str(match.iloc[0, 3]).replace('.', '').replace(',', '')
-                            i_raw = str(match.iloc[0, 4]).replace('.', '').replace(',', '')
-                            
-                            p_val = int(float(p_raw)) if p_raw.replace('nan','0').replace('.','').isdigit() else 0
-                            i_val = int(float(i_raw)) if i_raw.replace('nan','0').replace('.','').isdigit() else 0
-                            
-                            totals_p[sid] += p_val
-                            totals_i[sid] += i_val
-                            if p_val == 0:
-                                abs_dates[sid].append(fecha)
-                except Exception as e:
-                    debug_area.error(f"Error en link {fecha}: {e}")
-                    continue
-            
-            status.text(f"Calculando... {fecha}")
+    if st.button("⌨️ MODO MANUAL" if not st.session_state.manual_mode else "🌐 MODO AUTO"):
 
-        st.session_state.results = [
-            {"Surtidor": f"Surtidor {s}", "Pedidos": totals_p[s], "Piezas": totals_i[s], 
-             "Ausencias": len(abs_dates[s]), "Fechas": ", ".join(abs_dates[s])}
-            for s in range(1, limit + 1)
-        ]
-        status.success("¡Listo!")
+        st.session_state.manual_mode = not st.session_state.manual_mode
+
         st.rerun()
 
-    except Exception as e:
-        st.error(f"Error en la lista maestra: {e}")
+    active_ids = []
 
-# --- 5. THE RESULTS ---
-if 'results' in st.session_state:
-    df = pd.DataFrame(st.session_state.results)
+    st.write("---")
+
+    c1, c2, c3 = st.columns([2, 1, 1])
+
+    c1.markdown("**ID**")
+
+    c2.markdown("**On**")
+
+    c3.markdown("🍴")
+
+    for sid in ALL_IDS:
+
+        if sid <= sidebar_limit:
+
+            col1, col2, col3 = st.columns([2, 1, 1])
+
+            with col1: st.markdown(f"**Surtidor {sid}**")
+
+            with col2: on = st.toggle("", value=True, key=f"on_{sid}", label_visibility="collapsed")
+
+            with col3: meal = st.toggle("", key=f"m_{sid}", label_visibility="collapsed")
+
+            if on and not meal: active_ids.append(sid)
+
+    st.write("---")
+
+    btn_label = "👁️ OCULTAR TURNOS" if st.session_state.show_turns else "🚀 GENERAR TURNOS"
+
+    if st.button(btn_label):
+
+        st.session_state.show_turns = not st.session_state.show_turns
+
+        st.rerun()
+
+
+
+# --- MAIN CONTENT ---
+
+st.title("📦 Panel de Productividad")
+
+
+
+if st.button(" ✳️ ACTUALIZAR PANEL"):
+
+    data_p, data_i = {}, {}
+
+    abs_data = []
+
     
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("🏅 Ranking")
-        st.table(df.sort_values("Pedidos", ascending=False)[["Surtidor", "Pedidos", "Piezas"]])
+
+    def clean_val(v):
+
+        try:
+
+            val_str = str(v).strip().replace(',', '').replace('.', '')
+
+            return int(float(val_str)) if val_str not in ["", "-", "nan"] else 0
+
+        except: return 0
+
+
+
+    try:
+
+        df_raw = pd.read_csv(SHEET_URL, header=None)
+
+        rows, cols = df_raw.shape
+
+
+
+        # 1. Main Grid Logic (Productivity)
+
+        # We start from row 3 to skip the "Ligas" section at the top
+
+        for r in range(3, rows):
+
+            for c in range(cols):
+
+                cell_val = str(df_raw.iloc[r, c]).strip()
+
+                # Check if cell is exactly a number in our ID range
+
+                if cell_val.isdigit():
+
+                    sid = int(cell_val)
+
+                    if sid in ALL_IDS and sid <= sidebar_limit:
+
+                        # Once we find an ID, we know Pedidos is 2 columns ahead and Piezas is 3
+
+                        p_val = clean_val(df_raw.iloc[r, c + 2]) if c+2 < cols else 0
+
+                        i_val = clean_val(df_raw.iloc[r, c + 3]) if c+3 < cols else 0
+
+                        
+
+                        # Only add if there's actually data to prevent counting IDs from non-table areas
+
+                        if p_val > 0 or i_val > 0:
+
+                            data_p[sid] = data_p.get(sid, 0) + p_val
+
+                            data_i[sid] = data_i.get(sid, 0) + i_val
+
+                            # Break inner loop to move to next row once ID is processed
+
+                            break
+
+        
+
+        # 2. Ausencias Feature (Table J2:L23)
+
+        for r in range(2, 23): 
+
+            if r < rows and cols > 11:
+
+                id_val = str(df_raw.iloc[r, 9]).strip() 
+
+                count_val = str(df_raw.iloc[r, 10]).strip() 
+
+                dates_val = str(df_raw.iloc[r, 11]).strip() 
+
+
+
+                try:
+
+                    actual_count = int(float(count_val)) if count_val not in ["nan", ""] else 0
+
+                except: actual_count = 0
+
+
+
+                try:
+
+                    sid_int = int(float(id_val))
+
+                except: sid_int = 0
+
+                
+
+                if sid_int > 0:
+
+                    date_list = [d.strip() for d in dates_val.split(',')] if dates_val != "nan" else []
+
+                    abs_data.append({
+
+                        "Surtidor": f"Surtidor {sid_int}", 
+
+                        "ID": sid_int, 
+
+                        "Count": actual_count, 
+
+                        "Dates": date_list
+
+                    })
+
+                            
+
+    except Exception as e:
+
+        st.error(f"Error: {e}")
+
+
+
+    ranking_list = [{"ID": s, "Surtidor": f"Surtidor {s}", "Pedidos": data_p.get(s,0), "Piezas": data_i.get(s,0)} for s in range(1, sidebar_limit + 1)]
+
+    st.session_state.final_ranking = sorted(ranking_list, key=lambda x: x['Pedidos'], reverse=True)
+
+    st.session_state.scores = {s: data_p.get(s, 0) for s in ALL_IDS}
+
+    st.session_state.abs_list = abs_data
+
+    st.rerun()
+
+
+
+# --- VISUALS ---
+
+if st.session_state.final_ranking:
+
+    full_df = pd.DataFrame(st.session_state.final_ranking)
+
+    df_active = full_df[full_df['Pedidos'] > 0].copy()
+
     
-    with c2:
-        st.subheader("⚠️ Ausencias")
-        st.table(df[df["Ausencias"] > 0][["Surtidor", "Ausencias", "Fechas"]])
+
+    col_chart, col_table = st.columns([1, 1])
+
+    with col_chart:
+
+        if not df_active.empty:
+
+            fig = px.pie(df_active, values='Pedidos', names='Surtidor', hole=.4, color_discrete_sequence=px.colors.sequential.Reds_r)
+
+            fig.update_layout(height=350, showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor='rgba(0,0,0,0)')
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        else:
+
+            st.info("No hay pedidos registrados hoy.")
+
+    with col_table:
+
+        st.markdown("### 🏅 Ranking")
+
+        st.table(df_active[["Surtidor", "Pedidos", "Piezas"]] if not df_active.empty else full_df[["Surtidor", "Pedidos", "Piezas"]].head(sidebar_limit))
+
+
+
+    st.write("---")
+
+    st.markdown("### ⚠️ AUSENCIAS")
+
+    filter_input = st.text_input("Filtro (ID o 'T' para ausentes):", key="abs_filter").strip().upper()
+
+    
+
+    filtered_abs = []
+
+    total_abs_count = 0
+
+    for item in st.session_state.abs_list:
+
+        show = (filter_input == "T" and item['Count'] > 0) or (filter_input == "") or (filter_input.isdigit() and int(filter_input) == item['ID'])
+
+        if show:
+
+            filtered_abs.append(item)
+
+            total_abs_count += item['Count']
+
+
+
+    rows_html = ""
+
+    for item in filtered_abs:
+
+        dates_str = " | ".join(item['Dates']) if item['Dates'] else "Sin fechas"
+
+        rows_html += f"<tr><td>{item['Surtidor']}</td><td><span class='date-tooltip' title='{dates_str}'>{item['Count']} días</span></td></tr>"
+
+
+
+    table_content = f"""<div class="abs-container"><h4 style="margin:0 0 10px 0;">Inasistencias en vista: {total_abs_count}</h4><table class="custom-table"><thead><tr><th>Surtidor</th><th>Ausencias (Hover para fechas)</th></tr></thead><tbody>{rows_html if rows_html else "<tr><td colspan='2'>No hay coincidencias</td></tr>"}</tbody></table></div>"""
+
+    st.markdown(table_content, unsafe_allow_html=True)
