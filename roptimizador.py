@@ -1,3 +1,9 @@
+# Update the GID to 2083245391 for the RELLENO_LINKS tab
+MONTH_GIDS = {
+    "ABRIL 2026": "2083245391", 
+    "MAYO 2026": "0", 
+}
+
 import streamlit as st
 import re
 import pandas as pd
